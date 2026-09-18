@@ -1,10 +1,10 @@
-import { defineConfig } from 'transone-cli';
+import { defineConfig } from '@geektech/tsone-cli';
 import { docRoutes } from './src/content';
 
 /**
  * TransOne CLI 文档子站配置。
  *
- * 与主文档站同构，由 TransOne 自身构建；部署在 GitHub Pages 子路径
+ * 与主文档站同构，由 @geektech/tsone 构建；部署在 GitHub Pages 子路径
  * /transone/cli/（CI 通过 `--base /transone/cli/` 注入，本地开发留空）。
  */
 export default defineConfig({

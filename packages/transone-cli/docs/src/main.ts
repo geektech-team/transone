@@ -2,12 +2,11 @@ import {
   Component,
   createApp,
   createComponent,
-  createRouter,
   renderHtmlDocument,
   type AppDocumentRenderOptions,
   type VNode,
-} from 'transone';
-import { docRoutes, findPage } from './content';
+} from '@geektech/tsone';
+import { docRoutes, findPage, normalizeDocPath } from './content';
 import { deriveDocBase, setDocBasePath } from './base';
 import { DocsPage } from './components/DocsPage';
 import { docsStyles } from './styles';
@@ -16,44 +15,35 @@ interface DocsAppState {
   path: string;
 }
 
+/**
+ * 根组件：根据当前 URL 渲染对应文档页。
+ * 与主文档站同构：纯静态多页形态，页面路径由模块作用域
+ * 的 window.location.pathname 反推，SSR 与客户端一致。
+ */
 class DocsApp extends Component<Record<string, never>, DocsAppState> {
-  private unsubscribe?: () => void;
-
   protected initState(): DocsAppState {
-    return { path: router.getCurrentRoute()?.path ?? '/' };
+    return { path: currentDocPath };
   }
 
   protected initStyles(): void {}
 
-  protected onMounted(): void {
-    this.unsubscribe = router.onRouteChange((to) => {
-      this.state.path = to.path;
-    });
-  }
-
-  protected onUnmounted(): void {
-    this.unsubscribe?.();
-  }
-
   protected render(): VNode {
-    return createComponent({
-      component: DocsPage,
-      props: { path: this.state.path },
-    });
+    // ComponentNode<P> 在框架类型上是不变的，带具体 props 的组件节点
+    // 需显式断言为 VNode（与 TSone 文档站的用法一致）。
+    return createComponent(DocsPage, { path: this.state.path }) as VNode;
   }
 }
 
-// 与主文档站同构：模块作用域用 pathname 反推部署 base（SSR 与客户端一致）。
+// 与主文档站同构：模块作用域用 pathname 反推部署 base，再反推当前文档路径。
 const currentPath =
   typeof window !== 'undefined' ? window.location.pathname : '/';
 const base = deriveDocBase(currentPath, docRoutes);
 setDocBasePath(base);
 
-const router = createRouter({
-  routes: docRoutes.map((path) => ({ path, component: DocsApp })),
-  base: base || '/',
-  mode: 'history',
-});
+/** 去掉部署 base 后的文档路径（如 /transone/cli/guide/x → /guide/x）。 */
+const currentDocPath = normalizeDocPath(
+  base && currentPath.startsWith(base) ? currentPath.slice(base.length) : currentPath
+);
 
 const oneApp = createApp({
   root: DocsApp,
@@ -65,8 +55,6 @@ const oneApp = createApp({
   },
 });
 
-router.install(oneApp);
-
 if (typeof document !== 'undefined') {
   const rootEl = document.getElementById('app');
   rootEl?.replaceChildren();
@@ -75,7 +63,7 @@ oneApp.mount();
 
 export const app = {
   renderHtmlDocument(options: AppDocumentRenderOptions): string {
-    const page = findPage(router.getCurrentRoute()?.path ?? '/');
+    const page = findPage(currentDocPath);
     return renderHtmlDocument({
       lang: 'zh-CN',
       title:

@@ -1,4 +1,4 @@
-import type { StyleSheet } from 'transone';
+import type { StyleSheet } from '@geektech/tsone';
 
 /**
  * 文档站全局样式。作为 StyleSheet 传给 SSR 文档壳（renderHtmlDocument 的
@@ -233,7 +233,13 @@ export const docsStyles: StyleSheet = [
   },
   {
     selector: '.doc-home',
-    properties: { flex: 1, minWidth: 0, padding: '8px 0 64px' },
+    properties: {
+      flex: 1,
+      minWidth: 0,
+      padding: '8px 0 64px',
+      margin: '0 auto',
+      maxWidth: '1120px',
+    },
   },
   {
     selector: '.doc-footer',
@@ -246,12 +252,14 @@ export const docsStyles: StyleSheet = [
       padding: '20px 24px 40px',
     },
   },
-  // ---- 首页 ----
+  // ---- 首页（左右居中布局）----
   {
     selector: '.doc-hero',
     properties: {
       padding: '72px 0 48px',
       maxWidth: '760px',
+      margin: '0 auto',
+      textAlign: 'center',
     },
   },
   {
@@ -282,7 +290,12 @@ export const docsStyles: StyleSheet = [
   },
   {
     selector: '.doc-hero-actions',
-    properties: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
+    properties: {
+      display: 'flex',
+      gap: '12px',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+    },
   },
   {
     selector: '.doc-btn',
@@ -320,6 +333,9 @@ export const docsStyles: StyleSheet = [
       gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
       gap: '16px',
       marginBottom: '48px',
+      maxWidth: '1040px',
+      marginLeft: 'auto',
+      marginRight: 'auto',
     },
   },
   {
@@ -345,6 +361,15 @@ export const docsStyles: StyleSheet = [
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
       gap: '16px',
+    },
+  },
+  {
+    // 首页内的链接卡片网格随首页整体左右居中；子包总览等普通页面保持通栏。
+    selector: '.doc-home .doc-link-grid',
+    properties: {
+      maxWidth: '1040px',
+      marginLeft: 'auto',
+      marginRight: 'auto',
     },
   },
   {

@@ -1,7 +1,12 @@
-import type { TargetType } from './target/types';
+import type { MpTargetType, TargetType } from './target/types';
 
-export type { TargetType } from './target/types';
-export { TARGET_TYPES, isTargetType } from './target/types';
+export type { MpTargetType, TargetType } from './target/types';
+export {
+  MP_TARGET_TYPES,
+  isMpTargetType,
+  isTargetType,
+  TARGET_TYPES,
+} from './target/types';
 
 export interface ProxyOptions {
   target: string;
@@ -48,6 +53,16 @@ export interface ResolvedMiniProgramConfig {
   publicDir: string;
   globalData?: Record<string, unknown>;
 }
+
+/** 按小程序平台分组的目标端配置：{ 'mp-weixin': {...}, 'mp-alipay': {...} }。 */
+export type MiniProgramConfigMap = Partial<Record<MpTargetType, MiniProgramConfig>>;
+
+/**
+ * mp 字段的两种写法：
+ * - 单一 `MiniProgramConfig`：作用于任意小程序目标（向后兼容，微信单端推荐）；
+ * - `MiniProgramConfigMap`：按平台分组，构建时只取当前 target 对应的那份。
+ */
+export type UserMiniProgramConfig = MiniProgramConfig | MiniProgramConfigMap;
 
 export interface ServerConfig {
   host?: string;
@@ -100,8 +115,8 @@ export interface UserConfig {
   server?: ServerConfig;
   build?: BuildConfig;
   library?: LibraryConfig;
-  /** 微信小程序目标端配置（--target mp-weixin）。 */
-  mp?: MiniProgramConfig;
+  /** 小程序目标端配置：单一配置（作用于所有 mp 目标）或按平台分组（'mp-weixin' / 'mp-alipay' / 'mp-bytedance'）。 */
+  mp?: UserMiniProgramConfig;
 }
 
 export interface ResolveConfigOptions {

@@ -1,6 +1,5 @@
 {
   "name": "transone-monorepo",
-  "private": true,
   "type": "module",
   "workspaces": [
     "packages/*",

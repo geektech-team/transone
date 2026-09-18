@@ -13,34 +13,44 @@
     "docs": {
       "name": "transone-docs",
       "dependencies": {
-        "transone": "workspace:*",
+        "@geektech/tsone": "^0.5.1",
       },
       "devDependencies": {
-        "transone-cli": "workspace:*",
+        "@geektech/tsone-cli": "^1.0.0",
       },
     },
     "packages/transone": {
       "name": "transone",
-      "version": "0.1.1",
+      "version": "0.2.0",
     },
     "packages/transone-cli": {
       "name": "transone-cli",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "bin": {
         "transone": "bin/transone.ts",
       },
       "dependencies": {
-        "transone": "workspace:*",
+        "transone": "file:../transone",
         "typescript": "^5.3.3",
       },
     },
     "packages/transone-cli/docs": {
       "name": "transone-cli-docs",
       "dependencies": {
-        "transone": "workspace:*",
+        "@geektech/tsone": "^0.5.1",
       },
       "devDependencies": {
-        "transone-cli": "workspace:*",
+        "@geektech/tsone-cli": "^1.0.0",
+      },
+    },
+    "packages/transone-ui": {
+      "name": "transone-ui",
+      "version": "0.1.0",
+      "devDependencies": {
+        "transone": "workspace:*",
+      },
+      "peerDependencies": {
+        "transone": ">=0.1.2",
       },
     },
     "playground/counter": {
@@ -52,8 +62,22 @@
         "transone-cli": "workspace:*",
       },
     },
+    "playground/ui-demo": {
+      "name": "transone-playground-ui-demo",
+      "dependencies": {
+        "transone": "workspace:*",
+        "transone-ui": "workspace:*",
+      },
+      "devDependencies": {
+        "transone-cli": "workspace:*",
+      },
+    },
   },
   "packages": {
+    "@geektech/tsone": ["@geektech/tsone@0.5.1", "", {}, "sha512-b9aEf5HyLcKUMZ7JK0aOwKJBC4z/JdPf4Dbor5+IJyGdv1jWqf1lKdAnNDw52mRwZmRvxrLZ9uw9k25lUBm36A=="],
+
+    "@geektech/tsone-cli": ["@geektech/tsone-cli@1.0.0", "", { "dependencies": { "@geektech/tsone": "0.5.1", "typescript": "^5.3.3" }, "bin": { "tsone": "bin/tsone.ts" } }, "sha512-S10cxWza4K2IYFlidHkHlXrvyh5oV2hcNm+2Tx1LGckyiVxBwWDXqreOdm0rg57uD/RSwwgLWpmuIVo/mStNwQ=="],
+
     "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 
     "@types/node": ["@types/node@26.6.1", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-VqGJBMCtdhqkBUCcBLvywI0NJ+KLuVzgNnlBUNFOQjqVxzo2lxLUNg1DSey8+u2u6ktswSAxg+s68QLzWHNOuA=="],
@@ -71,6 +95,10 @@
     "transone-docs": ["transone-docs@workspace:docs"],
 
     "transone-playground-counter": ["transone-playground-counter@workspace:playground/counter"],
+
+    "transone-playground-ui-demo": ["transone-playground-ui-demo@workspace:playground/ui-demo"],
+
+    "transone-ui": ["transone-ui@workspace:packages/transone-ui"],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

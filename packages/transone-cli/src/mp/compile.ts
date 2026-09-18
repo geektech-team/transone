@@ -10,6 +10,7 @@ import { compileTemplate, kebabCase } from './wxml';
 import { compileStyles } from './styles';
 import { compileState } from './state';
 import { compileMethods } from './methods';
+import { collectInlineModules } from './inline';
 
 export interface UnitOptions {
   kind: UnitKind;
@@ -54,6 +55,7 @@ export function compileUnit(
       usedNames.add(emitter.method);
     }
     const customEvents = new Set<string>();
+    const inlineModules = collectInlineModules(context, classSource);
     const compiledMethods = compileMethods(
       context,
       classSource,
@@ -65,7 +67,7 @@ export function compileUnit(
     // emitters 包装方法：还原 triggerEvent 的 e.detail.args
     const methods: FunctionEntry[] = [...compiledMethods.methods];
     for (const emitter of builder.emitters) {
-      const key = `__transone_emitter_${emitter.event}`;
+      const key = emitter.key ?? `__transone_emitter_${emitter.event}`;
       const fn = emitter.passArgs
         ? `function(e) { this.${emitter.method}(...e.detail.args); }`
         : `function() { this.${emitter.method}(); }`;
@@ -91,6 +93,7 @@ export function compileUnit(
       lifecycle: compiledMethods.lifecycle,
       customEvents: [...customEvents],
       usingComponents,
+      inlineModules,
     };
 
     if (kind === 'component') {

@@ -312,8 +312,8 @@ export const targetsPage: DocPage = {
     ),
     heading(2, '本站在各端的产物'),
     paragraph(
-      '本文档站本身就是 TransOne 的 Web 产物（',
-      inlineCode('transone build --target web'),
+      '本文档站本身就是 @geektech/tsone 的 Web 产物（',
+      inlineCode('tsone build'),
       '），以 directoryPages 多页形态部署到 GitHub Pages 子路径——base 推导、SSR 内容渲染与客户端路由均跑在框架自身能力上。',
     ),
   ],

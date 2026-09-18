@@ -307,6 +307,44 @@ async function serveProjectRequest(
     });
   }
 
+  // SPA history fallback：H5 端使用 history 模式路由时，刷新/直达深层路径
+  // （如 /rankings/metro）在服务端没有对应页面，回落到入口页由前端路由接管。
+  // 排除 API 路径与带扩展名的静态资源请求。
+  if (
+    pathname !== '/' &&
+    !pathname.startsWith('/api/') &&
+    !/\.[a-zA-Z0-9]+$/.test(pathname)
+  ) {
+    const bundle = await getBundle(config.entry);
+    if (!(bundle instanceof Response)) {
+      try {
+        const { renderProjectHtml } = await import('./project');
+        const html = await renderProjectHtml(
+          config,
+          {
+            head: bundle.stylesheets.map(({ pathname: href }) => ({
+              tag: 'link',
+              attributes: { rel: 'stylesheet', href },
+            })),
+            scripts: [{ type: 'module', src: bundle.entry.pathname }],
+          },
+          config.entry,
+          '/'
+        );
+        publishDevelopmentBundle(bundle, artifacts);
+        return new Response(liveReload ? injectLiveReloadScript(html) : html, {
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        });
+      } catch (error: unknown) {
+        console.error(error);
+        return buildFailureResponse();
+      }
+    }
+  }
+
   return new Response('Not found', {
     status: 404,
     headers: { 'cache-control': 'no-store' },

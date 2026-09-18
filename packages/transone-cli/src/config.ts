@@ -1,11 +1,12 @@
 import type { TargetType } from './target/types';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isTargetType } from './target/types';
+import { isMpTargetType, isTargetType, MP_TARGET_TYPES } from './target/types';
 import type {
   BuildConfig,
   LibraryConfig,
   MiniProgramConfig,
+  MiniProgramConfigMap,
   ProxyOptions,
   ResolveConfigOptions,
   ResolvedConfig,
@@ -13,6 +14,7 @@ import type {
   ResolvedMiniProgramConfig,
   ServerConfig,
   UserConfig,
+  UserMiniProgramConfig,
 } from './types';
 
 interface MergedConfig {
@@ -29,7 +31,7 @@ interface MergedConfig {
     directoryPages: boolean;
   };
   library?: LibraryConfig;
-  mp?: MiniProgramConfig;
+  mp?: UserMiniProgramConfig;
 }
 
 type ConfigFileLoadResult =
@@ -80,13 +82,16 @@ export async function resolveConfig(
     throw new Error(`Entry file does not exist: ${entry}`);
   }
   const pages = await resolvePages(root, entry, config.pages);
-  const mpPages = config.mp?.pages
-    ? await resolvePages(root, entry, config.mp.pages, {
+  const target = resolveTarget(options.target);
+  // 按当前 target 挑选小程序配置：扁平配置对所有 mp 目标生效，
+  // 按平台分组（mp['mp-weixin'] 等）时只取对应平台。
+  const mpConfig = pickMpConfig(config.mp, target);
+  const mpPages = mpConfig?.pages
+    ? await resolvePages(root, entry, mpConfig.pages, {
         includeEntry: false,
         allowRoot: true,
       })
     : pages;
-  const target = resolveTarget(options.target);
   // --target mp-weixin 时启用小程序构建；config.mp 缺失则走默认值
   // （touristappid / dist/build/mp-weixin / pages 复用 config.pages）。
   const mpEnabled = config.mp !== undefined || target === 'mp-weixin';
@@ -115,7 +120,7 @@ export async function resolveConfig(
           mp: resolveMiniProgram(
             root,
             options.mpOutDir,
-            config.mp ?? {},
+            mpConfig ?? {},
             mpPages,
             target
           ),
@@ -129,6 +134,31 @@ const MP_DEFAULT_OUT_DIRS: Record<string, string> = {
   'mp-alipay': 'dist/build/mp-alipay',
   'mp-bytedance': 'dist/build/mp-bytedance',
 };
+
+/**
+ * mp 字段是否为按平台分组写法（含 'mp-weixin' / 'mp-alipay' / 'mp-bytedance' 任一键）。
+ * 扁平配置的字段均为驼峰命名，与平台键不冲突，可安全区分。
+ */
+function isMpConfigMap(value: unknown): value is MiniProgramConfigMap {
+  return (
+    isRecord(value) &&
+    MP_TARGET_TYPES.some((platform) => platform in value)
+  );
+}
+
+/** 取当前 target 对应的小程序配置：扁平配置对所有 mp 目标生效；分组配置只取对应平台。 */
+function pickMpConfig(
+  mp: UserMiniProgramConfig | undefined,
+  target: TargetType
+): MiniProgramConfig | undefined {
+  if (mp === undefined) {
+    return undefined;
+  }
+  if (isMpConfigMap(mp)) {
+    return isMpTargetType(target) ? mp[target] : undefined;
+  }
+  return mp;
+}
 
 function resolveMiniProgram(
   root: string,
@@ -320,6 +350,62 @@ function validateUserConfig(config: unknown): asserts config is UserConfig {
   }
   if (config.library !== undefined) {
     validateLibraryConfig(config.library);
+  }
+  if (config.mp !== undefined) {
+    validateMpConfig(config.mp);
+  }
+}
+
+/**
+ * 校验 mp 字段：扁平单一配置，或按平台分组（每项都是一个平台配置）。
+ */
+function validateMpConfig(
+  mp: unknown
+): asserts mp is UserMiniProgramConfig {
+  assertRecord(mp, 'Config mp');
+  if (isMpConfigMap(mp)) {
+    for (const platform of MP_TARGET_TYPES) {
+      const platformConfig = mp[platform];
+      if (platformConfig !== undefined) {
+        validateMiniProgramConfig(platformConfig, `Config mp.${platform}`);
+      }
+    }
+    return;
+  }
+  validateMiniProgramConfig(mp, 'Config mp');
+}
+
+function validateMiniProgramConfig(
+  mp: unknown,
+  label: string
+): asserts mp is MiniProgramConfig {
+  assertRecord(mp, label);
+
+  for (const key of ['appId', 'outDir', 'navigationBarTitleText', 'publicDir'] as const) {
+    if (mp[key] !== undefined && typeof mp[key] !== 'string') {
+      throw new Error(`${label}.${key} must be a string`);
+    }
+  }
+  if (mp.pages !== undefined) {
+    validatePagesConfig(mp.pages, `${label}.pages`);
+  }
+  for (const key of ['window', 'tabBar', 'appExtra', 'globalData'] as const) {
+    if (mp[key] !== undefined) {
+      assertRecord(mp[key], `${label}.${key}`);
+    }
+  }
+  if (mp.pageExtra !== undefined) {
+    assertRecord(mp.pageExtra, `${label}.pageExtra`);
+    for (const [route, extra] of Object.entries(mp.pageExtra)) {
+      assertRecord(extra, `${label}.pageExtra.${route}`);
+    }
+  }
+  if (
+    mp.lengthUnit !== undefined &&
+    mp.lengthUnit !== 'px' &&
+    mp.lengthUnit !== 'rpx'
+  ) {
+    throw new Error(`${label}.lengthUnit must be 'px' or 'rpx'`);
   }
 }
 

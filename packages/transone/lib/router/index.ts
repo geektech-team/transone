@@ -380,6 +380,19 @@ export class Router {
       meta: route?.meta,
     };
 
+    // 初始解析 / popstate 恢复：与 navigate() 一致地触发 afterEach
+    // （直达深层路由、浏览器前进后退时同步 document.title 等副作用）
+    if (this.afterHooks.length > 0) {
+      const to = this.currentLocation;
+      this.afterHooks.forEach((hook) => {
+        try {
+          hook(to, null);
+        } catch (error) {
+          console.error('Route afterEach error:', error);
+        }
+      });
+    }
+
     return this.currentLocation;
   }
 

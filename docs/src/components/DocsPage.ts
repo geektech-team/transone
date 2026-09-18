@@ -1,4 +1,4 @@
-import { Component, createComponent, type VNode } from 'transone';
+import { Component, createComponent, type VNode } from '@geektech/tsone';
 import { findPage } from '../content';
 import { withDocBasePath } from '../base';
 import { DocArticle } from './DocArticle';
@@ -64,7 +64,7 @@ export class DocsPage extends Component<DocsPageProps, object> {
                 props: { className: 'doc-brand-mark' },
                 children: ['T1'],
               },
-              'TransOne',
+              { tag: 'span', children: ['TransOne'] },
             ], 'doc-brand'),
             {
               tag: 'nav',
@@ -103,10 +103,7 @@ export class DocsPage extends Component<DocsPageProps, object> {
 
   private renderBody(page: NonNullable<ReturnType<typeof findPage>>): VNode {
     const isHome = page.path === '/';
-    const article = createComponent({
-      component: DocArticle,
-      props: { blocks: page.body },
-    });
+    const article = createComponent(DocArticle, { blocks: page.body }) as VNode;
 
     return {
       tag: 'main',
@@ -114,10 +111,7 @@ export class DocsPage extends Component<DocsPageProps, object> {
       children: isHome
         ? [article]
         : [
-            createComponent({
-              component: DocsNav,
-              props: { currentPath: page.path },
-            }),
+            createComponent(DocsNav, { currentPath: page.path }) as VNode,
             {
               tag: 'div',
               props: { className: 'doc-content' },
@@ -179,7 +173,7 @@ export class DocsPage extends Component<DocsPageProps, object> {
           },
           children: ['GitHub'],
         },
-        ' · 本站由 TransOne 自身构建（transone build --target web）',
+        ' · 本站由 @geektech/tsone 构建（tsone build）',
       ],
     };
   }

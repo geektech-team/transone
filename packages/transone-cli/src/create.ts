@@ -14,9 +14,9 @@ export interface CreateProjectResult {
 }
 
 /** Published framework version referenced by generated projects. */
-export const TRANSONE_FRAMEWORK_VERSION = '0.1.1';
+export const TRANSONE_FRAMEWORK_VERSION = '0.2.0';
 /** Published CLI version referenced by generated projects. */
-export const TRANSONE_CLI_VERSION = '0.1.1';
+export const TRANSONE_CLI_VERSION = '0.2.0';
 
 export const GITHUB_URL = 'https://github.com/geektech-team/transone';
 

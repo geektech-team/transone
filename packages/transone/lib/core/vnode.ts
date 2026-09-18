@@ -196,6 +196,7 @@ export interface ComponentDescriptor<P extends VNodeComponentProps> {
   children?: Children;
   key?: string | number;
   directions?: Directions;
+  emitters?: Record<string, ComponentEventListener>;
 }
 
 export function createComponent<P extends VNodeComponentProps>(
@@ -230,6 +231,7 @@ export function createComponent<P extends VNodeComponentProps>(
     children: componentOrOptions.children,
     key: componentOrOptions.key,
     directions: componentOrOptions.directions,
+    emitters: componentOrOptions.emitters,
   };
 }
 

@@ -194,13 +194,13 @@ describe('mp compile: 页面模板', () => {
       }`
     );
 
-    // 页面：使用 badge 组件 + emitters 包装方法
+    // 页面：使用 badge 组件 + emitters 包装方法（key 带序号，支持同名事件多实例）
     expect(unit.template).toContain(
-      '<badge text="hello" bind:picked="__transone_emitter_picked">'
+      '<badge text="hello" bind:picked="__transone_emitter_picked_0">'
     );
     expect(unit.usingComponents['badge']).toBe('/components/badge/badge');
     const wrapper = unit.methods.find(
-      (entry) => entry.key === '__transone_emitter_picked'
+      (entry) => entry.key === '__transone_emitter_picked_0'
     )!;
     expect(wrapper.fn).toContain('this.handlePick(...e.detail.args)');
 
@@ -506,5 +506,71 @@ describe('mp compile: 页面模板', () => {
         }`
       )
     ).rejects.toThrow(/模板表达式不支持函数调用/);
+  });
+});
+
+describe('mp compile: 相对模块内联', () => {
+  it('页面方法体引用的普通模块被内联进产物 JS', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'transone-inline-'));
+
+    const helperSource = `
+      export interface Entry { city: string; score: number }
+      export const api = {
+        ranking: (code: string) => '/api/rankings/' + code,
+      };
+      export const RANKINGS = ['air', 'metro'];
+      export function fmtScore(n: number): string {
+        return n + ' 分';
+      }
+    `;
+    const pageSource = `
+      import { Component, h } from 'transone';
+      import { api, RANKINGS, fmtScore } from './helper.ts';
+      export class App extends Component {
+        initState() {
+          return { title: 'x' };
+        }
+        loadTitle() {
+          return api.ranking(RANKINGS[0]);
+        }
+        initStyles() {}
+        loadScore() {
+          return fmtScore(66);
+        }
+        render() {
+          return h('view', {}, ['x']);
+        }
+      }
+    `;
+
+    try {
+      await writeFile(join(dir, 'helper.ts'), helperSource, 'utf8');
+      await writeFile(join(dir, 'page.ts'), pageSource, 'utf8');
+
+      const ts = await loadTypescript();
+      const context = makeContext(ts);
+      const classSource = makeClassSource(
+        ts,
+        pageSource,
+        'App',
+        join(dir, 'page.ts')
+      );
+      const unit = compileUnit(context, classSource, { kind: 'page', name: 'index' });
+
+      expect(unit.inlineModules.length).toBeGreaterThan(0);
+      const { generatePageJs } = await import('../src/mp/jsgen');
+      const js = generatePageJs(unit, MP_WEIXIN_DIALECT);
+      expect(js).toContain('const api');
+      expect(js).toContain('RANKINGS');
+      expect(js).toContain('fmtScore');
+      // 类型与模块边界不应残留
+      expect(js).not.toContain('interface Entry');
+      expect(js).not.toContain('import {');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -3,6 +3,8 @@ export interface ParsedEventName {
   modifiers: Set<string>;
 }
 
+import { convertRpx } from '../../style/units';
+
 export function isEventProp(key: string): boolean {
   return /^on[A-Z]/.test(key) || /^on[a-z]/.test(key);
 }
@@ -55,5 +57,5 @@ export function setStyleValue(
     ? property
     : property.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
 
-  style.setProperty(cssProperty, String(value));
+  style.setProperty(cssProperty, convertRpx(value));
 }

@@ -45,6 +45,8 @@ export interface CompiledUnit {
   propsReferenced: Set<string>;
   /** usingComponents：tag -> 小程序绝对路径。 */
   usingComponents: Record<string, string>;
+  /** 内联的相对模块 JS（按依赖顺序，产物顶部拼接）。 */
+  inlineModules: string[];
 }
 
 /** 编译过程中的上下文：跨模块共享的文件缓存与产物缓存。 */

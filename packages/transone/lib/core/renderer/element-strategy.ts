@@ -16,6 +16,7 @@ import {
   wrapEventHandler,
 } from './props';
 import type { RenderRuntimeContext, RenderStrategy, Renderable } from './types';
+import { getRouter } from '../../router/instance';
 
 export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -69,10 +70,31 @@ export class ElementRenderStrategy<
       return document.createComment('if');
     }
 
-    const element = SVG_TAGS.has(vnode.tag)
-      ? document.createElementNS(SVG_NAMESPACE, vnode.tag)
-      : document.createElement(vnode.tag);
-    this.applyProps(element, {}, vnode.props ?? {}, context);
+    // H5 端 navigator（小程序原生组件）：渲染为 <a> 并接管点击走 SPA 路由；
+    // url / openType 为小程序导航语义，不落到 DOM 属性上。
+    const isNavigator = vnode.tag === 'navigator';
+    const element = isNavigator
+      ? document.createElement('a')
+      : SVG_TAGS.has(vnode.tag)
+        ? document.createElementNS(SVG_NAMESPACE, vnode.tag)
+        : document.createElement(vnode.tag);
+
+    const props = vnode.props ?? {};
+    if (isNavigator) {
+      const { url: targetUrl, openType: _openType, ...restProps } = props;
+      const url = typeof targetUrl === 'string' ? targetUrl : '#';
+      element.setAttribute('href', url);
+      element.addEventListener('click', (event) => {
+        const router = getRouter();
+        if (router) {
+          event.preventDefault();
+          void router.push(element.getAttribute('href') ?? '#');
+        }
+      });
+      this.applyProps(element, {}, restProps, context);
+    } else {
+      this.applyProps(element, {}, props, context);
+    }
     this.updateListeners(element, {}, this.collectListeners(vnode));
     this.mountChildren(element, vnode, context);
     this.applyDirections(element, undefined, vnode.directions, context);
@@ -108,12 +130,28 @@ export class ElementRenderStrategy<
       return nextNode;
     }
 
-    this.applyProps(
-      currentNode,
-      oldVNode.props ?? {},
-      newVNode.props ?? {},
-      context
-    );
+    const isNavigator =
+      newVNode.tag === 'navigator' || oldVNode.tag === 'navigator';
+    if (isNavigator) {
+      const oldProps = oldVNode.props ?? {};
+      const newProps = newVNode.props ?? {};
+      const oldUrl = typeof oldProps.url === 'string' ? oldProps.url : '';
+      const newUrl = typeof newProps.url === 'string' ? newProps.url : '';
+      if (oldUrl !== newUrl) {
+        currentNode.setAttribute('href', newUrl);
+      }
+      const newNav = { ...newProps };
+      delete (newNav as { url?: unknown }).url;
+      delete (newNav as { openType?: unknown }).openType;
+      this.applyProps(currentNode, oldProps, newNav, context);
+    } else {
+      this.applyProps(
+        currentNode,
+        oldVNode.props ?? {},
+        newVNode.props ?? {},
+        context
+      );
+    }
     this.updateListeners(
       currentNode,
       this.collectListeners(oldVNode),

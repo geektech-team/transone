@@ -12,7 +12,10 @@ export default defineConfig({
     outDir: 'dist/web',
   },
   mp: {
-    appId: 'wx5ce4dae29058e087',
-    navigationBarTitleText: 'TransOne 演练',
+    // 按平台分组：--target mp-weixin / mp-alipay / mp-bytedance 时各取对应配置
+    'mp-weixin': {
+      appId: 'wx5ce4dae29058e087',
+      navigationBarTitleText: 'TransOne 演练',
+    },
   },
 });

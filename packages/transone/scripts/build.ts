@@ -24,6 +24,7 @@ const result = await Bun.build({
     './lib/router/index.ts',
     './lib/style/index.ts',
     './lib/dom/index.ts',
+    './lib/request/index.ts',
   ],
   outdir: './dist',
   root: './lib',

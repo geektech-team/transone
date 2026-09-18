@@ -1,4 +1,4 @@
-import type { StyleSheet } from 'transone';
+import type { StyleSheet } from '@geektech/tsone';
 
 /**
  * 文档站全局样式。作为 StyleSheet 传给 SSR 文档壳（renderHtmlDocument 的

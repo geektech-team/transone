@@ -15,6 +15,7 @@
 - 面向对象组件模型：`Component<Props, State>`、生命周期、事件、插槽
 - 策略化渲染层：文本、元素、组件、插槽按 VNode 类型分发
 - 内置路由：`createRouter`、`RouterView`、`RouterLink`
+- 跨端请求：`request` 模块统一封装 Web / 微信 / 阿里 / 字节的请求 API，支持拦截器
 - 目标端抽象：`web` / `mp-weixin` / `mp-alipay` / `mp-bytedance`，未来扩展 `app-ios` / `app-android` / `app-harmony`
 
 ## 目标端支持矩阵
@@ -84,6 +85,60 @@ transone build --target mp-bytedance  # 产出字节小程序原生工程（M3 �
 
 未实现的目标端会在编译期快速报错并给出对应路线图阶段。
 
+## 跨端请求（request）
+
+`transone/request`（同时从 `transone` 根入口导出）封装各端请求 API：
+Web 走 `fetch`，微信 / 阿里 / 字节小程序分别走 `wx.request` / `my.request` / `tt.request`。
+运行环境自动探测，一份源码无需改动即可跨端发请求；也支持按端显式指定或注入自定义适配器。
+
+```typescript
+import { createRequest } from 'transone/request';
+
+// 实例级默认值：baseURL / headers / timeout / platform 等
+const http = createRequest({ baseURL: '/api', timeout: 10000 });
+
+// 请求拦截器：注册顺序执行（如注入登录态）
+http.interceptors.request.use((config) => {
+  config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// 响应拦截器：后注册的先执行（如统一解包业务码、兜底错误提示）
+http.interceptors.response.use(
+  (response) => {
+    if (response.data?.code !== 0) {
+      throw new RequestError({
+        code: 'BAD_REQUEST',
+        message: response.data?.message ?? '业务错误',
+        config: response.config,
+        response,
+      });
+    }
+    return response;
+  },
+  (error) => {
+    // error 为 RequestError，可按 code 分支：TIMEOUT / ABORTED / NETWORK_ERROR …
+    throw error;
+  }
+);
+
+const res = await http.get<{ list: Item[] }>('/items', { params: { page: 1 } });
+await http.post('/users', { name: 'a' });
+```
+
+也可用全局默认实例，或按目标端覆盖：
+
+```typescript
+import { request, detectPlatform } from 'transone/request';
+
+await request.get('/ping');                          // 自动探测目标端
+await request.get('/x', { platform: 'weixin' });     // 显式指定端
+console.log(detectPlatform());                       // 'web' | 'weixin' | 'alipay' | 'bytedance'
+```
+
+错误统一为 `RequestError`（`code` / `config` / `response` / `cause`），
+HTTP 4xx / 5xx 不视为异常（与小程序端 success 语义一致），由调用方按 `statusCode` 处理。
+
 ## 与 TSone 的关系
 
 - **TransOne 是 TSone 的多端泛化**：TSone 聚焦 Web 运行时，TransOne 把同一套响应式 / 组件 / 渲染模型通过编译期转换输出到多端。
@@ -120,6 +175,33 @@ bun run --cwd playground/counter build:web   # 构建 Web 产物
 bun run --cwd playground/counter preview     # 本地预览构建产物
 ```
 
+## 常见问题
+
+### 构建报 `EADDRINUSE: address already in use, listen '.../*.sock'`
+
+**症状**：`yarn run build:weixin` 等命令输出 `Failed to start inspector:` 后退出码 1，
+报错路径形如 `/var/folders/.../T/wyjy2vn8ox.sock`，且日志开头有 `Debugger attached.`。
+
+**根因**：构建命令被以调试模式启动了（IDE 的 JavaScript Debug Terminal / Bun 调试按钮会
+注入 `BUN_INSPECT` 等调试器变量）。Bun 因此尝试启动 inspector 并监听临时 Unix socket；
+上一次调试会话异常退出留下的 socket 文件未清理，`bind()` 撞上已存在的文件即报
+`EADDRINUSE`（与是否有进程占用无关）。
+
+**已内置的防护**：playground 的 `build:*` 脚本统一用
+`env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS=`
+剥离调试器变量，构建命令不再进入调试模式，也不会再创建/碰撞调试 socket。
+
+**残留清理**：历史遗留的无占用 socket 可用仓库脚本安全清理（只删无进程占用的文件）：
+
+```bash
+bash scripts/clean-debug-sockets.sh           # 预览
+bash scripts/clean-debug-sockets.sh --apply   # 执行
+```
+
+**日常建议**：构建类命令用普通终端或 IDE 的普通运行（非 Debug）执行即可；
+调试能力只对 `dev` 长驻进程有意义，需要调试 dev 时显式使用
+`bun --inspect transone dev`。
+
 ## 文档
 
 在线文档部署在 GitHub Pages（合并部署，主站 + CLI 子站）：
@@ -136,7 +218,7 @@ bun run docs:preview    # 本地预览主文档站
 bun run docs:cli:build  # 构建 CLI 文档子站（packages/transone-cli/docs/dist）
 ```
 
-文档站由 TransOne 自身构建（`transone build --target web`，SSR + 静态产物），
+文档站由 @geektech/tsone 构建（`tsone build`，SSR + 静态产物），
 源码在 [docs/](./docs) 与 [packages/transone-cli/docs](./packages/transone-cli/docs)。
 CI 部署见 [.github/workflows/docs-pages.yml](./.github/workflows/docs-pages.yml)：
 主站与 CLI 子站分别以 `--base` 构建后合并为单个 Pages 站点。
@@ -148,7 +230,8 @@ CI 部署见 [.github/workflows/docs-pages.yml](./.github/workflows/docs-pages.y
 ```bash
 bun test && bunx tsc --noEmit && bun run build && \
 bun pm pack --cwd packages/transone --dry-run && \
-bun pm pack --cwd packages/transone-cli --dry-run
+bun pm pack --cwd packages/transone-cli --dry-run && \
+bun pm pack --cwd packages/transone-ui --dry-run
 ```
 
 ## License

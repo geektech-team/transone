@@ -15,6 +15,8 @@ export interface EmitterUsage {
   event: string;
   method: string;
   passArgs: boolean;
+  /** 页面/组件 JS 中的包装方法名（按出现顺序唯一，避免同名事件冲突）。 */
+  key: string;
 }
 
 /** 模板编译期间收集的产物信息。 */
@@ -234,6 +236,18 @@ const TAG_KEYS = new Set([
   'key',
   'directions',
 ]);
+
+
+/** 显式传入的 undefined 字面量视为参数缺省（与 TS 运行时语义一致）。 */
+function notUndefined(
+  ts: typeof tsTypes,
+  expression: tsTypes.Expression | undefined
+): boolean {
+  return (
+    expression !== undefined &&
+    !(ts.isIdentifier(expression) && expression.text === 'undefined')
+  );
+}
 
 function isEventProp(key: string): boolean {
   return /^on[A-Z]/.test(key) || /^on[a-z]/.test(key);
@@ -471,8 +485,8 @@ function compileElementCall(
     } else {
       propsExpr = args[1];
       childrenExpr = args[2];
-      listenersExpr = args[3];
-      directionsExpr = args[5];
+      listenersExpr = notUndefined(ts, args[3]) ? args[3] : undefined;
+      directionsExpr = notUndefined(ts, args[5]) ? args[5] : undefined;
     }
   } else {
     // 元素快捷方式：Div({ props, children, ... })
@@ -1008,10 +1022,14 @@ function compileComponent(
       throw mpError(classSource.filePath, 'emitters 必须是对象字面量');
     }
     for (const property of emittersExpr.properties) {
-      if (
-        !ts.isPropertyAssignment(property) ||
-        !ts.isIdentifier(property.name)
-      ) {
+      if (!ts.isPropertyAssignment(property)) {
+        throw mpError(classSource.filePath, 'emitters 只支持静态事件名');
+      }
+      const eventName =
+        ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+          ? property.name.text
+          : undefined;
+      if (eventName === undefined) {
         throw mpError(classSource.filePath, 'emitters 只支持静态事件名');
       }
       const usage = compileEmitterHandler(
@@ -1025,11 +1043,11 @@ function compileComponent(
           'emitters 处理器只支持 () => this.method() 或 (value) => this.method(value)'
         );
       }
-      usage.event = property.name.text;
+      usage.event = eventName;
+      const key = `__transone_emitter_${eventName}_${env.builder.emitters.length}`;
+      usage.key = key;
       env.builder.emitters.push(usage);
-      attrs.push(
-        `bind:${property.name.text}="__transone_emitter_${property.name.text}"`
-      );
+      attrs.push(`bind:${eventName}="${key}"`);
     }
   }
 
@@ -1162,7 +1180,7 @@ function compileEmitterHandler(
     ts.isPropertyAccessExpression(handlerExpr) &&
     isThisExpression(ts, handlerExpr.expression)
   ) {
-    return { event: 'pending', method: handlerExpr.name.text, passArgs: true };
+    return { event: 'pending', method: handlerExpr.name.text, passArgs: true, key: '' };
   }
   if (!ts.isArrowFunction(handlerExpr)) {
     return undefined;
@@ -1172,7 +1190,7 @@ function compileEmitterHandler(
     return undefined;
   }
   if (call.args.length === 0) {
-    return { event: 'pending', method: call.method, passArgs: false };
+    return { event: 'pending', method: call.method, passArgs: false, key: '' };
   }
   const arg =
     call.args.length === 1 ? unwrapTypeAssertions(ts, call.args[0]) : undefined;
@@ -1184,7 +1202,7 @@ function compileEmitterHandler(
     ts.isIdentifier(arg) &&
     handlerExpr.parameters[0].name.text === arg.text
   ) {
-    return { event: 'pending', method: call.method, passArgs: true };
+    return { event: 'pending', method: call.method, passArgs: true, key: '' };
   }
   return undefined;
 }
@@ -1308,15 +1326,50 @@ function compileStyleAttr(
     }
     const cssKey = property.name.text.replace(/([A-Z])/g, '-$1').toLowerCase();
     const folded = foldExpression(ts, property.initializer, env.scope.consts);
-    if (typeof folded !== 'string' && typeof folded !== 'number') {
-      throw mpError(
-        classSource.filePath,
-        `style 属性值只支持静态字面量: ${property.name.text}`
-      );
+    if (typeof folded === 'string' || typeof folded === 'number') {
+      declarations.push(`${cssKey}: ${String(folded)};`);
+    } else {
+      // 动态值：识别 `表达式 + '单位'`（如 item.width + '%'）拆成标准插值
+      // style="width: {{item.width}}%;"（微信官方推荐，比表达式拼接更可靠）
+      const unitSplit = splitUnitExpression(ts, property.initializer);
+      if (unitSplit) {
+        declarations.push(
+          `${cssKey}: {{${toBinding(bindingContext(context, classSource, env), unitSplit.expr)}}}${unitSplit.unit};`
+        );
+      } else {
+        declarations.push(
+          `${cssKey}: {{${toBinding(bindingContext(context, classSource, env), property.initializer)}}};`
+        );
+      }
     }
-    declarations.push(`${cssKey}: ${String(folded)};`);
   }
   return `style="${escapeAttr(declarations.join(' '))}"`;
+}
+
+/**
+ * 识别 `表达式 + '单位'` 形态（item.width + '%' / p.x + 'px'），返回表达式与单位；
+ * 仅当右侧为纯单位字符串字面量时拆解，其他动态表达式原样走 {{expr}}。
+ */
+function splitUnitExpression(
+  ts: typeof tsTypes,
+  expr: tsTypes.Expression
+): { expr: tsTypes.Expression; unit: string } | undefined {
+  expr = unwrapParentheses(ts, expr);
+  if (!ts.isBinaryExpression(expr)) {
+    return undefined;
+  }
+  if (expr.operatorToken.kind !== ts.SyntaxKind.PlusToken) {
+    return undefined;
+  }
+  const right = unwrapParentheses(ts, expr.right);
+  if (!ts.isStringLiteral(right)) {
+    return undefined;
+  }
+  const unit = right.text;
+  if (!/^[a-z%]+$/i.test(unit)) {
+    return undefined;
+  }
+  return { expr: expr.left, unit };
 }
 
 function compileGenericAttr(

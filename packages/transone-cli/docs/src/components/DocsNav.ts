@@ -1,4 +1,4 @@
-import { Component, type VNode } from 'transone';
+import { Component, type VNode } from '@geektech/tsone';
 import { withDocBasePath } from '../base';
 import {
   SECTION_ORDER,

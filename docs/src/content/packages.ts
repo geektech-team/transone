@@ -18,30 +18,80 @@ import {
 export const packagesOverviewPage: DocPage = {
   path: '/packages',
   title: '子包文档',
-  description: 'TransOne monorepo 中各发布包的文档入口：核心框架与多端编译器。',
+  description: 'TransOne monorepo 中各发布包的文档目录：核心框架与多端编译器。',
   section: 'packages',
   order: 0,
   body: [
     heading(1, '子包文档'),
     paragraph(
-      'TransOne 是 Bun workspace monorepo。每个发布包拥有独立的文档：核心框架文档即本站（本文档站由 TransOne 自身构建），编译器文档部署在',
+      'TransOne 是 Bun workspace monorepo，两个发布包按目录组织：',
+      inlineCode('/packages/transone/'),
+      ' 为核心框架各模块，',
+      inlineCode('/packages/transone-cli/'),
+      ' 为多端编译器各模块。本文档站由 @geektech/tsone 构建，编译器操作指南部署在',
       inlineCode('/cli/'),
-      '子路径。未来加入新包时，按同样方式在',
-      inlineCode('/<pkg>/'),
-      '下新增子站并在',
-      ' docs-pages.yml',
-      ' 合并即可。',
+      ' 子路径。',
+    ),
+    heading(2, 'transone · 核心框架'),
+    paragraph(
+      '纯 TypeScript、零运行时依赖的跨端前端框架：响应式、面向对象组件模型、策略化渲染、路由与样式。',
     ),
     linkGrid([
       {
-        title: 'transone',
-        description: '核心框架：响应式、组件、渲染、路由、样式，SSR 文档渲染。',
-        href: '/packages/transone',
+        title: '应用与组件模型',
+        description: 'createApp / OneApp、插件、组件基类、生命周期、插槽与数据模型表单。',
+        href: '/packages/transone/application',
       },
       {
-        title: 'transone-cli',
-        description: '多端编译器：Target 抽象、transone create / dev / build 命令。',
-        href: '/packages/transone-cli',
+        title: '响应式系统',
+        description: 'reactive / ref / computed / effect / watch，细粒度依赖收集与批处理调度。',
+        href: '/packages/transone/reactivity',
+      },
+      {
+        title: '渲染层与模板',
+        description: 'VNode 模型、元素工厂、策略化渲染分发与文本模板引擎。',
+        href: '/packages/transone/renderer',
+      },
+      {
+        title: '路由',
+        description: 'createRouter、导航守卫、RouterLink / RouterView 与 history / hash 双模式。',
+        href: '/packages/transone/router',
+      },
+      {
+        title: '样式系统',
+        description: 'StyleManager 组件样式、StyleSheet 数据化样式表与 rpx 多端单位。',
+        href: '/packages/transone/style',
+      },
+      {
+        title: '服务端渲染与 DOM',
+        description: 'renderHtmlDocument 文档壳、SSR 同构形态与零依赖 DOM 模拟。',
+        href: '/packages/transone/ssr',
+      },
+    ]),
+    heading(2, 'transone-cli · 多端编译器'),
+    paragraph(
+      'Bun-native 编译器：按 Target 把同一份 TypeScript 源码静态转换为 Web 与多端小程序原生工程。',
+    ),
+    linkGrid([
+      {
+        title: 'CLI 命令',
+        description: 'transone create / dev / build 三个命令与全部参数。',
+        href: '/packages/transone-cli/commands',
+      },
+      {
+        title: '配置',
+        description: 'transone.config.ts、defineConfig / resolveConfig 与配置字段。',
+        href: '/packages/transone-cli/config',
+      },
+      {
+        title: '目标端抽象',
+        description: 'BuildTarget 接口、TargetRegistry 注册表与 web / 小程序目标端实现。',
+        href: '/packages/transone-cli/targets',
+      },
+      {
+        title: '构建流程与产物',
+        description: '站点构建（SSR + 静态多页）、库打包（--library）与小程序产物。',
+        href: '/packages/transone-cli/build',
       },
     ]),
     callout(
@@ -59,7 +109,7 @@ export const packagesOverviewPage: DocPage = {
 export const transonePackagePage: DocPage = {
   path: '/packages/transone',
   title: 'transone 核心框架',
-  description: '核心框架包：安装、公开 API 一览与子路径导出。',
+  description: '核心框架包：安装、公开 API 一览、子路径导出与模块目录。',
   section: 'packages',
   order: 1,
   body: [
@@ -92,6 +142,16 @@ export const transonePackagePage: DocPage = {
         ['transone/dom', 'DOM 渲染模块（createDomWindow / installDomGlobals 等）'],
       ]
     ),
+    heading(2, '模块目录'),
+    paragraph('按源码模块拆分，逐一深入：'),
+    ul([
+      [link('应用与组件模型', '/transone/packages/transone/application'), ' · createApp / OneApp / 组件 / 生命周期 / 数据模型表单'],
+      [link('响应式系统', '/transone/packages/transone/reactivity'), ' · reactive / ref / computed / effect / watch / 调度器'],
+      [link('渲染层与模板', '/transone/packages/transone/renderer'), ' · VNode / 策略分发 / 元素工厂 / TemplateEngine'],
+      [link('路由', '/transone/packages/transone/router'), ' · createRouter / 守卫 / RouterView / 双模式 / base'],
+      [link('样式系统', '/transone/packages/transone/style'), ' · StyleManager / StyleSheet / rpx 单位'],
+      [link('服务端渲染与 DOM', '/transone/packages/transone/ssr'), ' · renderHtmlDocument / SSR 同构 / DOM 模拟'],
+    ]),
     heading(2, '示例'),
     paragraph('完整示例见快速开始页面，或仓库内 playground/counter 演练项目。'),
     ul([
@@ -106,9 +166,9 @@ export const transonePackagePage: DocPage = {
 export const transoneCliPackagePage: DocPage = {
   path: '/packages/transone-cli',
   title: 'transone-cli 多端编译器',
-  description: '编译器包：Target 抽象、命令一览与部署形态。',
+  description: '编译器包：Target 抽象、命令一览、配置与部署形态。',
   section: 'packages',
-  order: 2,
+  order: 8,
   body: [
     heading(1, 'transone-cli'),
     paragraph(
@@ -146,6 +206,14 @@ export const transoneCliPackagePage: DocPage = {
       inlineCode('app-harmony'),
       '（默认 web；未实现的端编译期快速报错）。',
     ),
+    heading(2, '模块目录'),
+    paragraph('按编译器源码模块拆分，逐一深入：'),
+    ul([
+      [link('CLI 命令', '/transone/packages/transone-cli/commands'), ' · create / dev / build 与全部参数'],
+      [link('配置', '/transone/packages/transone-cli/config'), ' · transone.config.ts / defineConfig / 字段与覆盖顺序'],
+      [link('目标端抽象', '/transone/packages/transone-cli/targets'), ' · BuildTarget / TargetRegistry / web 与小程序目标'],
+      [link('构建流程与产物', '/transone/packages/transone-cli/build'), ' · SSR 静态多页 / 库打包 / 小程序产物'],
+    ]),
     heading(2, '子路径部署'),
     paragraph(
       'GitHub Pages 等静态托管把项目挂在子路径下（如',

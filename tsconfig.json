@@ -12,6 +12,8 @@
       "transone/router": ["packages/transone/lib/router/index.ts"],
       "transone/style": ["packages/transone/lib/style/index.ts"],
       "transone/dom": ["packages/transone/lib/dom/index.ts"],
+      "transone/request": ["packages/transone/lib/request/index.ts"],
+      "transone-ui": ["packages/transone-ui/lib/index.ts"],
       "transone-cli": ["packages/transone-cli/src/index.ts"]
     },
     "allowImportingTsExtensions": true,
@@ -31,13 +33,19 @@
     "packages/transone/lib",
     "packages/transone/scripts",
     "packages/transone/tests",
+    "packages/transone-ui/lib",
+    "packages/transone-ui/scripts",
+    "packages/transone-ui/tests",
     "packages/transone-cli/src",
     "packages/transone-cli/tests",
     "packages/transone-cli/docs/src",
+    "packages/transone-cli/docs/tsone.config.ts",
     "playground/counter/src",
     "playground/counter/transone.config.ts",
+    "playground/ui-demo/src",
+    "playground/ui-demo/transone.config.ts",
     "docs/src",
-    "docs/transone.config.ts"
+    "docs/tsone.config.ts"
   ],
   "exclude": [
     "node_modules",

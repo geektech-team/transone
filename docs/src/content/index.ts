@@ -12,9 +12,27 @@ import {
   transoneCliPackagePage,
   transonePackagePage,
 } from './packages';
+import {
+  transoneApplicationPage,
+  transoneReactivityPage,
+  transoneRendererPage,
+  transoneRouterPage,
+  transoneSsrPage,
+  transoneStylePage,
+} from './transone-modules';
+import {
+  cliBuildPage,
+  cliCommandsPage,
+  cliConfigPage,
+  cliTargetsPage,
+} from './cli-modules';
 import { apiOverviewPage } from './reference';
 
-/** 全部文档页（首页排最前，其余按 section + order 排序）。 */
+/**
+ * 全部文档页（首页排最前，其余按 section + order 排序）。
+ * 子包文档按目录组织：/packages/transone/* 为核心框架模块，
+ * /packages/transone-cli/* 为编译器模块。
+ */
 export const docsPages: DocPage[] = [
   homePage,
   gettingStartedPage,
@@ -24,7 +42,17 @@ export const docsPages: DocPage[] = [
   roadmapPage,
   packagesOverviewPage,
   transonePackagePage,
+  transoneApplicationPage,
+  transoneReactivityPage,
+  transoneRendererPage,
+  transoneRouterPage,
+  transoneStylePage,
+  transoneSsrPage,
   transoneCliPackagePage,
+  cliCommandsPage,
+  cliConfigPage,
+  cliTargetsPage,
+  cliBuildPage,
   apiOverviewPage,
 ];
 

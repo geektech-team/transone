@@ -1,6 +1,6 @@
 {
   "name": "transone-cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Bun-native multi-target compiler CLI for TransOne applications: 一份 TypeScript 源码，按 Target 静态转换为 Web 与多端小程序原生工程",
   "type": "module",
   "exports": {

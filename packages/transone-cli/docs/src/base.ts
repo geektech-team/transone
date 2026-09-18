@@ -2,7 +2,7 @@
  * GitHub Pages 子路径（base path）处理。
  *
  * 部署形态：站点挂在组织 Pages 的子路径下（如
- * `https://geektech-team.github.io/transone/`）。transone-cli 的
+ * `https://geektech-team.github.io/transone/`）。tsone build 的
  * `--base` 只影响 SSR 时注入的 window URL（`http://127.0.0.1<base><route>`），
  * 因此入口可以在模块作用域读取 `window.location.pathname`，用已知路由表
  * 反推 base——SSR 与客户端使用同一套逻辑，无需额外注入。

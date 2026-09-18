@@ -30,6 +30,22 @@ export function isTargetType(value: unknown): value is TargetType {
   );
 }
 
+/** 小程序目标端类型（mp-*），config.mp 按平台分组时使用。 */
+export const MP_TARGET_TYPES = [
+  'mp-weixin',
+  'mp-alipay',
+  'mp-bytedance',
+] as const satisfies readonly TargetType[];
+
+export type MpTargetType = (typeof MP_TARGET_TYPES)[number];
+
+export function isMpTargetType(value: unknown): value is MpTargetType {
+  return (
+    typeof value === 'string' &&
+    (MP_TARGET_TYPES as readonly string[]).includes(value)
+  );
+}
+
 /**
  * 编译目标抽象：每个端一个实现，编译器按 Target 分发构建。
  *

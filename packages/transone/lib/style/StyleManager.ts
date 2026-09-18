@@ -5,6 +5,8 @@ export interface StyleOptions {
   media?: Record<string, Record<string, string | number>>;
 }
 
+import { convertRpx, ROOT_RPX_RULE } from './units';
+
 export class StyleManager {
   public styleElement: HTMLStyleElement | null = null;
   public styles: Map<string, StyleOptions> = new Map();
@@ -51,7 +53,7 @@ export class StyleManager {
     return Object.entries(properties)
       .map(([key, value]) => {
         const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-        return `${cssKey}: ${value};`;
+        return `${cssKey}: ${convertRpx(value)};`;
       })
       .join('\n');
   }
@@ -65,7 +67,7 @@ export class StyleManager {
     }
 
     const element = this.ensureStyleElement();
-    let cssText = '';
+    let cssText = ROOT_RPX_RULE + '\n';
 
     this.styles.forEach((style) => {
       // 基础样式

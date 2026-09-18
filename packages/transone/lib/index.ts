@@ -7,6 +7,9 @@ export * from './core';
 // 导出路由功能
 export * from './router';
 
+// 导出跨端请求模块
+export * from './request';
+
 // 创建应用实例的主函数
 export function createApp<
   TState extends object = Record<string, unknown>,
@@ -19,5 +22,5 @@ export function createApp<
 }
 
 // 导出框架名称和版本
-export const version = '0.1.1';
+export const version = '0.2.0';
 export const name = 'transone';

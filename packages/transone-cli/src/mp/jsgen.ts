@@ -5,14 +5,22 @@ const GENERATED_HEADER = (dialectId: string): string =>
   `// 由 transone build --target ${dialectId} 生成，请勿手动编辑`;
 
 /** 生成页面 JS：Page({ data, methods, lifecycle })（CommonJS）。 */
+function inlinePreamble(unit: CompiledUnit): string {
+  if (unit.inlineModules.length === 0) {
+    return '';
+  }
+  return unit.inlineModules.join('\n\n') + '\n\n';
+}
+
 export function generatePageJs(unit: CompiledUnit, dialect: MpDialect): string {
   const parts: string[] = [
     GENERATED_HEADER(dialect.id),
+    inlinePreamble(unit),
     'Page({',
     `  data: ${embedData(unit.data)},`,
   ];
   for (const entry of [...unit.methods, ...unit.lifecycle]) {
-    parts.push(`  ${entry.key}: ${entry.fn},`);
+    parts.push(`  ${JSON.stringify(entry.key)}: ${entry.fn},`);
   }
   parts.push('});');
   return parts.join('\n') + '\n';
@@ -20,18 +28,22 @@ export function generatePageJs(unit: CompiledUnit, dialect: MpDialect): string {
 
 /** 生成自定义组件 JS：Component({ properties, data, methods, lifetimes })。 */
 export function generateComponentJs(unit: CompiledUnit, dialect: MpDialect): string {
-  const parts: string[] = [GENERATED_HEADER(dialect.id), 'Component({'];
+  const parts: string[] = [
+    GENERATED_HEADER(dialect.id),
+    inlinePreamble(unit),
+    'Component({',
+  ];
   parts.push(`  properties: ${generatePropertiesSource(unit.properties)},`);
   parts.push(`  data: ${embedData(unit.data)},`);
   parts.push('  methods: {');
   for (const entry of unit.methods) {
-    parts.push(`    ${entry.key}: ${entry.fn},`);
+    parts.push(`    ${JSON.stringify(entry.key)}: ${entry.fn},`);
   }
   parts.push('  },');
   if (unit.lifecycle.length > 0) {
     parts.push('  lifetimes: {');
     for (const entry of unit.lifecycle) {
-      parts.push(`    ${entry.key}: ${entry.fn},`);
+      parts.push(`    ${JSON.stringify(entry.key)}: ${entry.fn},`);
     }
     parts.push('  },');
   }

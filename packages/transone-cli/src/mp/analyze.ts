@@ -207,50 +207,141 @@ function resolveImportedClass(
   localName: string,
   binding: ImportBinding
 ): ClassSource {
-  if (!binding.specifier.startsWith('.')) {
+  if (binding.specifier.startsWith('.')) {
+    const targetPath = resolveImportPath(from.filePath, binding.specifier);
+    if (!targetPath) {
+      throw mpError(
+        from.filePath,
+        `找不到导入文件 "${binding.specifier}"（相对 ${from.filePath}）`
+      );
+    }
+    const source = readSource(context, targetPath);
+    const importedName = binding.importedName;
+    const found = findExportedClass(context, source, importedName, new Set());
+    if (!found) {
+      throw mpError(
+        targetPath,
+        `找不到导出的组件类 "${importedName}"（从 ${localName} 导入）`
+      );
+    }
+    return {
+      filePath: found.filePath,
+      source: readSource(context, found.filePath),
+      declaration: found.declaration,
+      className: importedName,
+    };
+  }
+  return resolvePackageClass(context, from, localName, binding);
+}
+
+/**
+ * 解析包名导入的组件（如 `import { TuButton } from 'transone-ui'`）：
+ * 沿目录向上查找 node_modules/<specifier>/package.json，按其 `source` 字段
+ * （约定为可编译的 TS 源码入口）定位源码，再沿具名 re-export 找到组件类。
+ */
+function resolvePackageClass(
+  context: CompileContext,
+  from: ClassResolverContext,
+  localName: string,
+  binding: ImportBinding
+): ClassSource {
+  const packageInfo = findPackageInfo(from.filePath, binding.specifier);
+  if (!packageInfo) {
     throw mpError(
       from.filePath,
-      `无法解析组件来源 "${binding.specifier}"（仅支持相对路径导入的组件）`
+      `无法解析组件来源 "${binding.specifier}"：找不到 node_modules 包（仅支持相对路径或已安装的包）`
     );
   }
-  const targetPath = resolveImportPath(from.filePath, binding.specifier);
+  const sourceField = packageInfo.source;
+  if (typeof sourceField !== 'string' || sourceField.length === 0) {
+    throw mpError(
+      from.filePath,
+      `包 "${binding.specifier}" 缺少 "source" 字段：小程序编译需要可分析的 TS 源码入口（在 package.json 声明 "source": "./lib/index.ts"）`
+    );
+  }
+  const targetPath = resolvePackageSource(packageInfo.dir, sourceField);
   if (!targetPath) {
     throw mpError(
       from.filePath,
-      `找不到导入文件 "${binding.specifier}"（相对 ${from.filePath}）`
+      `包 "${binding.specifier}" 的 "source" 指向的文件不存在: ${sourceField}`
     );
   }
   const source = readSource(context, targetPath);
   const importedName = binding.importedName;
-  const declaration = findExportedClass(context, source, importedName);
-  if (!declaration) {
+  const found = findExportedClass(context, source, importedName, new Set());
+  if (!found) {
     throw mpError(
       targetPath,
-      `找不到导出的组件类 "${importedName}"（从 ${localName} 导入）`
+      `找不到导出的组件类 "${importedName}"（从 ${localName} 导入，包 "${binding.specifier}"）`
     );
   }
   return {
-    filePath: targetPath,
-    source,
-    declaration,
+    filePath: found.filePath,
+    source: readSource(context, found.filePath),
+    declaration: found.declaration,
     className: importedName,
   };
+}
+
+interface PackageInfo {
+  dir: string;
+  source?: unknown;
+}
+
+/** 沿 fromFile 目录向上查找 node_modules/<specifier>/package.json。 */
+function findPackageInfo(fromFile: string, specifier: string): PackageInfo | undefined {
+  const segments = specifier.split('/');
+  const packageJsonRelative = join('node_modules', ...segments, 'package.json');
+  let current = dirname(fromFile);
+  for (;;) {
+    const candidate = join(current, packageJsonRelative);
+    if (existsSync(candidate)) {
+      try {
+        const json = JSON.parse(readFileSync(candidate, 'utf8')) as Record<string, unknown>;
+        return { dir: join(current, 'node_modules', ...segments), source: json.source };
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
+function resolvePackageSource(packageDir: string, sourceField: string): string | undefined {
+  const base = resolve(packageDir, sourceField);
+  const candidates = [base, `${base}.ts`, `${base}.tsx`];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+interface ExportedClassLocation {
+  filePath: string;
+  declaration: tsTypes.ClassDeclaration;
 }
 
 function findExportedClass(
   context: CompileContext,
   source: tsTypes.SourceFile,
-  name: string
-): tsTypes.ClassDeclaration | undefined {
+  name: string,
+  seen: Set<string>
+): ExportedClassLocation | undefined {
   const { ts } = context;
+  if (seen.has(source.fileName)) {
+    return undefined;
+  }
+  seen.add(source.fileName);
+
   for (const statement of source.statements) {
     if (ts.isClassDeclaration(statement) && statement.name?.text === name) {
       if (isExported(ts, statement)) {
-        return statement;
+        return { filePath: source.fileName, declaration: statement };
       }
     }
   }
-  // export { X }
+  // export { X }（本地类）与 export { X } from './path'（re-export）
   for (const statement of source.statements) {
     if (
       ts.isExportDeclaration(statement) &&
@@ -258,11 +349,33 @@ function findExportedClass(
       ts.isNamedExports(statement.exportClause)
     ) {
       for (const element of statement.exportClause.elements) {
-        if (element.name.text === name) {
-          const local = collectLocalClasses(ts, source).get(name);
-          if (local) {
-            return local;
-          }
+        if (element.name.text !== name) {
+          continue;
+        }
+        const local = collectLocalClasses(ts, source).get(name);
+        if (local) {
+          return { filePath: source.fileName, declaration: local };
+        }
+        if (!statement.moduleSpecifier) {
+          continue;
+        }
+        const specifier = statement.moduleSpecifier.getText().replace(/['"]/g, '');
+        if (!specifier.startsWith('.')) {
+          continue;
+        }
+        const targetPath = resolveImportPath(source.fileName, specifier);
+        if (!targetPath) {
+          continue;
+        }
+        const targetSource = readSource(context, targetPath);
+        const reExported = findExportedClass(
+          context,
+          targetSource,
+          element.propertyName?.text ?? element.name.text,
+          seen
+        );
+        if (reExported) {
+          return reExported;
         }
       }
     }
