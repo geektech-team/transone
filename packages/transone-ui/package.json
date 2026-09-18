@@ -1,6 +1,6 @@
 {
   "name": "transone-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TransOne 跨端 UI 组件库：一份 TypeScript 源码，编译期静态转换为 Web 与多端小程序原生产物",
   "type": "module",
   "main": "./dist/index.js",

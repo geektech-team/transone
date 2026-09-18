@@ -22,5 +22,5 @@ export function createApp<
 }
 
 // 导出框架名称和版本
-export const version = '0.2.0';
+export const version = '0.3.0';
 export const name = 'transone';
