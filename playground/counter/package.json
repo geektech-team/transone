@@ -1,0 +1,19 @@
+{
+  "name": "transone-playground-counter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "transone dev",
+    "build:web": "transone build --target web",
+    "build:weixin": "transone build --target mp-weixin",
+    "build:alipay": "transone build --target mp-alipay",
+    "build:bytedance": "transone build --target mp-bytedance",
+    "preview": "bun scripts/preview.ts"
+  },
+  "dependencies": {
+    "transone": "workspace:*"
+  },
+  "devDependencies": {
+    "transone-cli": "workspace:*"
+  }
+}

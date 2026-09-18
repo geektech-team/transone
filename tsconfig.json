@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "transone": ["packages/transone/lib/index.ts"],
+      "transone/router": ["packages/transone/lib/router/index.ts"],
+      "transone/style": ["packages/transone/lib/style/index.ts"],
+      "transone/dom": ["packages/transone/lib/dom/index.ts"],
+      "transone-cli": ["packages/transone-cli/src/index.ts"]
+    },
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "packages/transone/lib",
+    "packages/transone/scripts",
+    "packages/transone/tests",
+    "packages/transone-cli/src",
+    "packages/transone-cli/tests",
+    "packages/transone-cli/docs/src",
+    "playground/counter/src",
+    "playground/counter/transone.config.ts",
+    "docs/src",
+    "docs/transone.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "packages/*/node_modules",
+    "packages/*/dist",
+    "packages/*/lib/**/__tests__/**",
+    "coverage"
+  ]
+}

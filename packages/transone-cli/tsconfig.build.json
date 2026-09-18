@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationDir": "dist",
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "sourceMap": false,
+    "paths": {
+      "transone": ["../transone/lib/index.ts"],
+      "transone/router": ["../transone/lib/router/index.ts"],
+      "transone/style": ["../transone/lib/style/index.ts"],
+      "transone/dom": ["../transone/lib/dom/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "coverage", "tests", "**/*.test.ts"]
+}

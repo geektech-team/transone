@@ -1,0 +1,16 @@
+{
+  "name": "transone-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "transone dev",
+    "build:web": "transone build --target web",
+    "preview": "bun scripts/preview.ts"
+  },
+  "dependencies": {
+    "transone": "workspace:*"
+  },
+  "devDependencies": {
+    "transone-cli": "workspace:*"
+  }
+}

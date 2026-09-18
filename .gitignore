@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+.env*
+*.log
+.worktrees/
+
+# 文档站构建产物（GitHub Pages 由 CI 构建，不入库）
+docs/dist/
+packages/transone-cli/docs/dist/

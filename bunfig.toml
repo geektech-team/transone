@@ -1,0 +1,2 @@
+[test]
+preload = ["./packages/transone/tests/setup-dom.ts"]

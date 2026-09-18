@@ -1,0 +1,80 @@
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'packages/transone/**'
+      - 'packages/transone-cli/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # 固定到本地验证过的版本，避免 latest 漂移导致 install 行为不一致
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build framework package
+        # Docs builds render through transone-cli (source mode in CI, since
+        # dist is gitignored), which imports transone/dom and friends from the
+        # framework dist. Build the framework first.
+        run: bun run --cwd packages/transone build
+
+      - name: Build documentation
+        # The docs site is served from a GitHub Pages project sub-path
+        # (e.g. https://<owner>.github.io/transone/), so the base path is the
+        # repository name.
+        run: bun run docs:build -- --base=/${{ github.event.repository.name }}/
+
+      - name: Build CLI documentation
+        # CLI docs are published under the same Pages site, merged into
+        # docs/dist/cli/ (e.g. https://<owner>.github.io/transone/cli/).
+        run: bun run docs:cli:build -- --base=/${{ github.event.repository.name }}/cli/
+
+      - name: Merge documentation into the Pages site
+        # transone build keeps its output inside the project root, so the CLI
+        # docs land in packages/transone-cli/docs/dist. Merge into the Pages
+        # deploy dir.
+        run: |
+          mkdir -p docs/dist/cli
+          cp -r packages/transone-cli/docs/dist/. docs/dist/cli/
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,36 @@
+{
+  "name": "transone-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "playground/*",
+    "docs",
+    "packages/transone-cli/docs"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd playground/counter dev",
+    "build": "bun run --cwd packages/transone build && bun run --cwd packages/transone-cli build",
+    "build:transone": "bun run --cwd packages/transone build",
+    "build:cli": "bun run --cwd packages/transone-cli build",
+    "build:types": "bun run --cwd packages/transone build:types && bun run --cwd packages/transone-cli build:types",
+    "lint": "bun run --cwd packages/transone lint && bun run --cwd packages/transone-cli lint",
+    "format": "prettier --write . --ignore-path .gitignore",
+    "test": "bun test",
+    "playground:build:web": "bun run --cwd playground/counter build:web",
+    "preview": "bun run --cwd playground/counter preview",
+    "release": "bun scripts/release.ts",
+    "docs:dev": "bun run --cwd docs dev",
+    "docs:build": "bun run --cwd docs build:web",
+    "docs:preview": "bun run --cwd docs preview",
+    "docs:cli:build": "bun run --cwd packages/transone-cli/docs build:web"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}
