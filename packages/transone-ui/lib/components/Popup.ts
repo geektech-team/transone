@@ -30,9 +30,23 @@ const POPUP_BASE = 'tu-popup';
  * - 小程序端 WXSS 同样支持 transition / transform / visibility，
  *   同一份源码编译出完全一致的结构与动效。
  */
-export class TuPopup extends Component<TuPopupProps, object> {
-  protected initState(): object {
-    return {};
+interface TuPopupState {
+  /** 实际应用可见性：方向切换时先置 false 让面板瞬移到新离屏位，再恢复 true 重放滑入。 */
+  appliedVisible: boolean;
+  /** 方向切换帧临时关闭面板过渡（transition: none），实现瞬移不播放跨方向动画。 */
+  noTransition: boolean;
+}
+
+export class TuPopup extends Component<TuPopupProps, TuPopupState> {
+  /** 上次渲染方向（用于检测方向切换）。 */
+  private lastPosition: TuPopupPosition | null = null;
+  /** 方向切换后延迟恢复可见性的计时器。 */
+  private visibleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 方向切换中间帧标志：setState 触发的更新不再把 appliedVisible 拉回 props。 */
+  private pendingPositionTransition = false;
+
+  protected initState(): TuPopupState {
+    return { appliedVisible: false, noTransition: false };
   }
 
   protected initStyles(): void {
@@ -97,6 +111,13 @@ export class TuPopup extends Component<TuPopupProps, object> {
       properties: {
         transition: 'transform var(--tu-duration, 300ms) ease, visibility 0s',
         visibility: 'visible',
+      },
+    });
+
+    this.styleManager.addStyle('tu-popup-panel-no-transition', {
+      selector: '.tu-popup__panel--no-transition',
+      properties: {
+        transition: 'none',
       },
     });
 
@@ -202,11 +223,11 @@ export class TuPopup extends Component<TuPopupProps, object> {
   }
 
   protected render(): VNode {
-    const visible = this.props.visible === true;
+    const visible = this.state.appliedVisible === true;
     const position = this.props.position || 'bottom';
     const rootCls = `${POPUP_BASE} ${POPUP_BASE}--${position}${visible ? ` ${POPUP_BASE}--visible` : ''}`;
     const maskCls = 'tu-popup__mask';
-    const panelCls = `tu-popup__panel${visible ? ' tu-popup__panel--visible' : ''}${this.props.round !== false ? ' tu-popup__panel--round' : ''}`;
+    const panelCls = `tu-popup__panel${visible ? ' tu-popup__panel--visible' : ''}${this.state.noTransition === true ? ' tu-popup__panel--no-transition' : ''}${this.props.round !== false ? ' tu-popup__panel--round' : ''}`;
     return h('div', { className: rootCls }, [
       h(
         'div',
@@ -218,6 +239,69 @@ export class TuPopup extends Component<TuPopupProps, object> {
       ),
       h('div', { className: panelCls }, [slot('default')]),
     ]);
+  }
+
+  protected onMounted(): void {
+    this.syncVisibleState();
+  }
+
+  protected onPropsChange(): void {
+    // Web 端在每次更新后触发；小程序端由 observers（properties 变化）触发。
+    this.syncVisibleState();
+  }
+
+  protected onUnmounted(): void {
+    if (this.visibleTimer !== null) {
+      clearTimeout(this.visibleTimer);
+      this.visibleTimer = null;
+    }
+  }
+
+  /**
+   * 可见性同步（方向切换去污染，双端一致）：
+   *
+   * panel 的滑入/滑出动画由 CSS transition 驱动（transform 离屏位 → 0）。
+   * 若方向变化与可见性变化同帧发生，浏览器会把 transform 从「上次方向的
+   * 离屏值」直接过渡到「新方向的可见值」（如 translateY(100%) → translateX(0)），
+   * 表现为从上次方向弹出。这里在方向变化帧先把面板置于新方向离屏位并
+   * 临时关闭过渡（noTransition 状态化，WXSS 与 CSS 同语义），瞬移不播放
+   * 跨方向动画；延迟一帧再恢复可见，从新方向正常滑入。
+   */
+  private syncVisibleState(): void {
+    const position = this.props.position || 'bottom';
+    const visible = this.props.visible === true;
+    const positionChanged =
+      this.lastPosition !== null && this.lastPosition !== position;
+
+    // 中间帧（方向切换后由 setState 触发的更新）不清 timer：等待延迟恢复
+    if (!this.pendingPositionTransition && this.visibleTimer !== null) {
+      clearTimeout(this.visibleTimer);
+      this.visibleTimer = null;
+    }
+
+    if (positionChanged && visible) {
+      // 方向切换 + 可见：先瞬移到新方向离屏位（关闭过渡，取消跨方向动画），
+      // 延迟一帧恢复可见，从新方向正常滑入。
+      this.pendingPositionTransition = true;
+      this.setState({ appliedVisible: false, noTransition: true });
+      this.visibleTimer = setTimeout(() => {
+        this.visibleTimer = null;
+        this.pendingPositionTransition = false;
+        if (this.mounted) {
+          this.setState({ appliedVisible: true, noTransition: false });
+        }
+      }, 24);
+    } else if (positionChanged) {
+      // 方向切换但不可见：面板在屏幕外，动画无感知，仅同步状态
+      this.pendingPositionTransition = false;
+      this.setState({ appliedVisible: false, noTransition: false });
+    } else if (this.pendingPositionTransition) {
+      // 方向切换中间帧（由 setState 触发的更新）：等待 timer 恢复可见
+    } else if (this.state.appliedVisible !== visible) {
+      this.setState({ appliedVisible: visible, noTransition: false });
+    }
+
+    this.lastPosition = position;
   }
 
   protected onMaskClick(): void {

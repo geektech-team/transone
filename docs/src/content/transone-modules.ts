@@ -13,7 +13,7 @@ import {
 } from './types';
 
 /**
- * transone 核心框架模块文档。
+ * transone 核心框架模块文档（transone 分区子菜单）。
  *
  * 每个模块页介绍一个功能域：公开 API（以源码为准）、行为与最小示例。
  * 模块与 packages/transone/lib 下的源码模块一一对应。
@@ -22,11 +22,11 @@ import {
 // ---- 应用与组件模型 ----
 
 export const transoneApplicationPage: DocPage = {
-  path: '/packages/transone/application',
+  path: '/application',
   title: '应用与组件模型',
   description: 'createApp / OneApp 应用实例、Plugin 插件、组件基类、生命周期与数据模型表单。',
-  section: 'packages',
-  order: 2,
+  section: 'transone',
+  order: 3,
   body: [
     heading(1, '应用与组件模型'),
     paragraph(
@@ -153,8 +153,8 @@ const app = createApp({ root: Counter, rootElement: '#app' });
 app.mount();`,
     ),
     ul([
-      [link('深入响应式：组件 state 的依赖收集', '/transone/packages/transone/reactivity')],
-      [link('渲染层：VNode 与策略分发', '/transone/packages/transone/renderer')],
+      [link('深入响应式：组件 state 的依赖收集', '/reactivity')],
+      [link('渲染层：VNode 与策略分发', '/renderer')],
     ]),
   ],
 };
@@ -162,11 +162,11 @@ app.mount();`,
 // ---- 响应式系统 ----
 
 export const transoneReactivityPage: DocPage = {
-  path: '/packages/transone/reactivity',
+  path: '/reactivity',
   title: '响应式系统',
   description: 'reactive / ref / computed / effect / watch，细粒度依赖收集与微任务批处理调度。',
-  section: 'packages',
-  order: 3,
+  section: 'transone',
+  order: 4,
   body: [
     heading(1, '响应式系统'),
     paragraph(
@@ -228,8 +228,8 @@ const n = ref(0);
 n.value = 42;        // ref 直接驱动独立 effect`,
     ),
     ul([
-      [link('组件中的应用：state 即响应式对象', '/transone/packages/transone/application')],
-      [link('调度器在渲染流程中的位置', '/transone/packages/transone/renderer')],
+      [link('组件中的应用：state 即响应式对象', '/application')],
+      [link('调度器在渲染流程中的位置', '/renderer')],
     ]),
   ],
 };
@@ -237,11 +237,11 @@ n.value = 42;        // ref 直接驱动独立 effect`,
 // ---- 渲染层与模板 ----
 
 export const transoneRendererPage: DocPage = {
-  path: '/packages/transone/renderer',
+  path: '/renderer',
   title: '渲染层与模板',
   description: 'VNode 模型、元素工厂、策略化渲染分发与文本模板引擎。',
-  section: 'packages',
-  order: 4,
+  section: 'transone',
+  order: 5,
   body: [
     heading(1, '渲染层与模板'),
     paragraph(
@@ -321,8 +321,8 @@ const engine = new TemplateEngine(reactive({ name: 'TransOne' }));
 const text = engine.parseTemplate('Hello {{name}}');`,
     ),
     ul([
-      [link('VNode 在组件 render 中的用法', '/transone/packages/transone/application')],
-      [link('SSR：同一渲染层输出 HTML 字符串', '/transone/packages/transone/ssr')],
+      [link('VNode 在组件 render 中的用法', '/application')],
+      [link('SSR：同一渲染层输出 HTML 字符串', '/ssr')],
     ]),
   ],
 };
@@ -330,11 +330,11 @@ const text = engine.parseTemplate('Hello {{name}}');`,
 // ---- 路由 ----
 
 export const transoneRouterPage: DocPage = {
-  path: '/packages/transone/router',
+  path: '/router',
   title: '路由',
   description: 'createRouter、路由记录、导航守卫、RouterLink / RouterView 与 history / hash 双模式。',
-  section: 'packages',
-  order: 5,
+  section: 'transone',
+  order: 6,
   body: [
     heading(1, '路由'),
     paragraph(
@@ -399,8 +399,8 @@ RouterLink({ props: { to: '/docs/getting-started' }, children: ['快速开始'] 
 RouterView(); // 渲染当前路由组件`,
     ),
     ul([
-      [link('文档站自身的 base 推导', '/transone/packages/transone/ssr')],
-      [link('部署子路径：GitHub Pages', '/transone/packages/transone-cli/build')],
+      [link('文档站自身的 base 推导', '/ssr')],
+      [link('部署子路径：GitHub Pages', '/cli/build')],
     ]),
   ],
 };
@@ -408,11 +408,11 @@ RouterView(); // 渲染当前路由组件`,
 // ---- 样式系统 ----
 
 export const transoneStylePage: DocPage = {
-  path: '/packages/transone/style',
+  path: '/style',
   title: '样式系统',
   description: 'StyleManager 组件样式、StyleSheet 数据化样式表与 rpx 多端单位换算。',
-  section: 'packages',
-  order: 6,
+  section: 'transone',
+  order: 7,
   body: [
     heading(1, '样式系统'),
     paragraph(
@@ -492,11 +492,11 @@ const css = renderStyleSheet(styles); // -> 内联进 <style>`,
 // ---- 服务端渲染与 DOM ----
 
 export const transoneSsrPage: DocPage = {
-  path: '/packages/transone/ssr',
+  path: '/ssr',
   title: '服务端渲染与 DOM',
   description: 'renderHtmlDocument 文档壳、SSR 同构形态与零依赖 DOM 模拟（createDomWindow）。',
-  section: 'packages',
-  order: 7,
+  section: 'transone',
+  order: 8,
   body: [
     heading(1, '服务端渲染与 DOM'),
     paragraph(
@@ -576,8 +576,8 @@ const html = app.renderHtmlDocument({
 });`,
     ),
     ul([
-      [link('构建期如何调用 SSR（--base 注入）', '/transone/packages/transone-cli/build')],
-      [link('渲染层：VNode 与策略', '/transone/packages/transone/renderer')],
+      [link('构建期如何调用 SSR（--base 注入）', '/cli/build')],
+      [link('渲染层：VNode 与策略', '/renderer')],
     ]),
   ],
 };

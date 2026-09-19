@@ -3,14 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsone dev",
-    "build:web": "tsone build",
+    "dev": "transone dev",
+    "build:web": "transone build",
     "preview": "bun scripts/preview.ts"
   },
   "dependencies": {
-    "@geektech/tsone": "^0.5.1"
+    "transone": "workspace:*",
+    "transone-ui": "workspace:*"
   },
   "devDependencies": {
-    "@geektech/tsone-cli": "^1.0.0"
+    "transone-cli": "workspace:*"
   }
 }

@@ -1,4 +1,5 @@
-import { Component, type VNode } from '@geektech/tsone';
+import { Component, createComponent, type VNode } from 'transone';
+import { demoRegistry } from '../demos';
 import type {
   DocBlock,
   InlineNode,
@@ -44,6 +45,13 @@ export class DocArticle extends Component<{ blocks: DocBlock[] }, object> {
 
       case 'paragraph':
         return { tag: 'p', children: this.renderInline(block.content) };
+
+      case 'demo': {
+        const Demo = demoRegistry[block.id];
+        return Demo
+          ? (createComponent({ component: Demo }) as VNode)
+          : { tag: 'div' };
+      }
 
       case 'code':
         return {

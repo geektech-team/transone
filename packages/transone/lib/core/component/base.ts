@@ -164,6 +164,7 @@ export abstract class Component<
       this.elementChangeListener?.(currentElement, this.el);
     }
     this.onUpdated();
+    this.onPropsChange();
   }
 
   public unmount(): void {
@@ -270,6 +271,8 @@ export abstract class Component<
   protected beforeUpdate(): void {}
 
   protected onUpdated(): void {}
+  /** props 更新钩子：Web 端在每次更新（setProps/setState）后调用；小程序端由 observers 在 properties 变化时触发。 */
+  protected onPropsChange(): void {}
 
   protected beforeUnmount(): void {}
 

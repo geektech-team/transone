@@ -5,7 +5,7 @@ import {
   renderHtmlDocument,
   type AppDocumentRenderOptions,
   type VNode,
-} from '@geektech/tsone';
+} from 'transone';
 import { docRoutes, findPage, normalizeDocPath } from './content';
 import { deriveDocBase, setDocBasePath } from './base';
 import { DocsPage } from './components/DocsPage';
@@ -37,7 +37,7 @@ class DocsApp extends Component<Record<string, never>, DocsAppState> {
 
 // ---- 入口接线 ----
 //
-// 部署形态：站点挂在 GitHub Pages 子路径（如 /transone/）。tsone build 的
+// 部署形态：站点挂在 GitHub Pages 子路径（如 /transone/）。transone build 的
 // --base 只影响 SSR 时注入的 window URL，因此这里在模块作用域读取 pathname，
 // 用路由表反推 base，再反推当前文档路径——SSR 与客户端同一套逻辑。
 
@@ -46,7 +46,7 @@ const currentPath =
 const base = deriveDocBase(currentPath, docRoutes);
 setDocBasePath(base);
 
-/** 去掉部署 base 后的文档路径（如 /transone/guide/x → /guide/x）。 */
+/** 去掉部署 base 后的文档路径（如 /transone/cli/commands → /cli/commands）。 */
 const currentDocPath = normalizeDocPath(
   base && currentPath.startsWith(base) ? currentPath.slice(base.length) : currentPath
 );

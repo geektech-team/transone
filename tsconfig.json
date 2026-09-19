@@ -38,8 +38,6 @@
     "packages/transone-ui/tests",
     "packages/transone-cli/src",
     "packages/transone-cli/tests",
-    "packages/transone-cli/docs/src",
-    "packages/transone-cli/docs/tsone.config.ts",
     "playground/counter/src",
     "playground/counter/transone.config.ts",
     "playground/ui-demo/src",

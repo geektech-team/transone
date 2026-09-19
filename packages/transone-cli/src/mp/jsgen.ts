@@ -47,6 +47,17 @@ export function generateComponentJs(unit: CompiledUnit, dialect: MpDialect): str
     }
     parts.push('  },');
   }
+  const hasPropsHook = unit.methods.some(
+    (entry) => entry.key === 'onPropsChange'
+  );
+  if (hasPropsHook) {
+    const watched = Object.keys(unit.properties);
+    parts.push('  observers: {');
+    parts.push(
+      `    ${JSON.stringify(watched.join(', '))}: function () { if (typeof this.onPropsChange === 'function') this.onPropsChange(); },`
+    );
+    parts.push('  },');
+  }
   parts.push('});');
   return parts.join('\n') + '\n';
 }

@@ -62,6 +62,11 @@ export function compileMethods(
       seed.add(hook);
     }
   }
+  // props 变化观察钩子：组件类定义了 onPropsChange 时纳入编译，
+  // jsgen 据此生成 observers（properties 变化触发），否则该钩子会被跳过。
+  if (methods.has('onPropsChange')) {
+    seed.add('onPropsChange');
+  }
 
   const queue = [...seed];
   const visited = new Set<string>();

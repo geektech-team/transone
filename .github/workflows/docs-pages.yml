@@ -45,19 +45,8 @@ jobs:
         # 框架与 CLI 以 npm 依赖形式安装，无需在 CI 先构建本地包。
         # 站点从 GitHub Pages 项目子路径提供服务（如
         # https://<owner>.github.io/transone/），base 取仓库名。
+        # transone / cli / ui / project 四个分区由同一站点提供。
         run: bun run docs:build -- --base=/${{ github.event.repository.name }}/
-
-      - name: Build CLI documentation
-        # CLI 文档部署在同一 Pages 站点下，合并进 docs/dist/cli/
-        # （如 https://<owner>.github.io/transone/cli/）。
-        run: bun run docs:cli:build -- --base=/${{ github.event.repository.name }}/cli/
-
-      - name: Merge documentation into the Pages site
-        # tsone build 把产物输出到各项目根下的 dist，CLI 文档落在
-        # packages/transone-cli/docs/dist。合并进 Pages 部署目录。
-        run: |
-          mkdir -p docs/dist/cli
-          cp -r packages/transone-cli/docs/dist/. docs/dist/cli/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

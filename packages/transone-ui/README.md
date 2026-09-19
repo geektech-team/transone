@@ -2,7 +2,14 @@
 
 跨端 UI 组件库：**一份 TypeScript 源码**，经 [transone-cli](https://www.npmjs.com/package/transone-cli) 静态编译为 Web 与小程序（微信 / 阿里 / 字节）原生产物。
 
-首期组件：`TuButton`、`TuSwitch`、`TuTag`、`TuProgress`、`TuInput`、`TuPopup`（支持 top / right / bottom / left 四向弹出）。
+组件（17 个，四类）：
+
+- **反馈**：`TuToast`（top / center / bottom 轻提示）、`TuModal`（确认弹窗）、`TuActionSheet`（底部动作面板）
+- **表单**：`TuCheckbox`（自绘复选框）、`TuRadio`（自绘单选框）、`TuSearchBar`（搜索栏）、`TuInput`（输入框）、`TuSwitch`（开关）
+- **展示**：`TuBadge`（徽标，超 max 显示 max+）、`TuCell`（单元格）、`TuEmpty`（空状态）、`TuTag`（标签）、`TuProgress`（进度条）
+- **导航**：`TuTabs`（标签页）、`TuNavbar`（导航栏）、`TuPopup`（top / right / bottom / left 四向弹出）
+
+全部组件为受控组件，API 与用法见 docs 站（`docs/` 或 `npm i transone-ui` 后查看）与 `playground/ui-demo` 演示。
 
 - 运行时：依赖 `transone`（>= 0.1.2，peerDependency）
 - 包名：`transone-ui`（无 scope）
@@ -142,6 +149,18 @@ class MyPage extends Component {
 5. **事件回传**：组件用 `emit(name, ...args)` 回传，父级用 `createComponent({ ..., emitters: { name: (v) => this.handle(v) } })` 订阅（对象形式）。小程序端编译为页面的包装方法并绑定 `bind:name`，同名事件自动加序号避免覆盖。
 6. **模板插值求值**：组件内部渲染（非插槽部分）不要使用 `{{}}`，一律通过 props 传入数据。
 7. **CSS 变量**：小程序端不支持运行时注入 CSS 变量，组件内联默认值保证开箱即用；如需定制，在 `app.wxss` 的 `page` 选择器里覆盖同名变量即可（见下节）。
+
+### 小程序端样式与交互适配要点
+
+组件库面向微信 / 阿里 / 字节三端小程序做了以下适配，新增组件均需遵守：
+
+- **间距不用 flex `gap`**：老内核 WebView 对 `gap` 支持不稳定，组件内间距一律用子元素 `margin` 实现（如 `Checkbox/Radio` 的 label、`Cell` 的右侧值、`Navbar` 的箭头、`Empty` 的各区块）。
+- **避免高级选择器**：wxss 仅保证基础选择器稳定可用，不在样式里使用 `:not()` 等；需要条件样式时用类名（`--checked` / `--visible` 等）或 `directions.show` 切换。
+- **安全区双声明**：`env(safe-area-inset-bottom)` 带 fallback 第二参数的写法在部分端解析失败，先写固定值兜底、再写 `calc(env(safe-area-inset-bottom) + Npx)` 覆盖（见 `ActionSheet`）。
+- **列表取数用 `dataIndex` 属性**：`h(..., { dataIndex: index }, [], { click: (e) => this.onTap(e) })`——mp 编译为 `data-index="{{index}}"`，Web 端自动转为 `data-index`，回调统一从 `e.currentTarget.dataset.index` 读取（`Tabs` / `ActionSheet`）。
+- **搜索确认键**：`TuSearchBar` 提供 `confirmType`（小程序键盘确认键文案，如 `'search'`），Web 端忽略；回车触发 `search` 事件。
+- **行内 style 的 CSS 变量**：若端上不解析行内 `var()`，同属性在 wxss 类中有默认值兜底，定制主题优先在 `app.wxss` 覆盖令牌。
+- **弹层定位**：`Toast` / `Modal` / `ActionSheet` / `Popup` 使用 `position: fixed` 渲染于组件内部，层级统一为 `--tu-popup-z-index`（默认 1000），避免与页面内容互相遮挡。
 
 ## 主题定制
 

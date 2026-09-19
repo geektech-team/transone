@@ -1,4 +1,4 @@
-import type { StyleSheet } from '@geektech/tsone';
+import type { StyleSheet } from 'transone';
 
 /**
  * 文档站全局样式。作为 StyleSheet 传给 SSR 文档壳（renderHtmlDocument 的
@@ -159,6 +159,10 @@ export const docsStyles: StyleSheet = [
     properties: { color: TEXT, background: BG_SOFT, textDecoration: 'none' },
   },
   {
+    selector: '.doc-header-link.active',
+    properties: { color: ACCENT, fontWeight: 600 },
+  },
+  {
     selector: '.doc-header-external',
     properties: { color: TEXT_MUTED, fontSize: '0.9rem', padding: '6px 8px' },
   },
@@ -190,24 +194,36 @@ export const docsStyles: StyleSheet = [
     properties: { marginBottom: '20px' },
   },
   {
-    selector: '.doc-nav-title',
+    selector: '.doc-nav-parent',
     properties: {
-      fontSize: '0.75rem',
-      fontWeight: 600,
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase',
-      color: TEXT_MUTED,
-      marginBottom: '8px',
+      display: 'block',
+      padding: '7px 12px',
+      borderRadius: '8px',
+      color: TEXT,
+      fontSize: '1rem',
+      fontWeight: 700,
+      marginBottom: '4px',
+    },
+  },
+  {
+    selector: '.doc-nav-parent:hover',
+    properties: { background: BG_SOFT, textDecoration: 'none' },
+  },
+  {
+    selector: '.doc-nav-parent.active',
+    properties: {
+      background: ACCENT_SOFT,
+      color: ACCENT,
     },
   },
   {
     selector: '.doc-nav-link',
     properties: {
       display: 'block',
-      padding: '6px 12px',
+      padding: '5px 12px 5px 24px',
       borderRadius: '8px',
       color: TEXT,
-      fontSize: '0.95rem',
+      fontSize: '0.92rem',
     },
   },
   {
@@ -230,6 +246,24 @@ export const docsStyles: StyleSheet = [
       maxWidth: '820px',
       padding: '24px 0 64px',
     },
+  },
+  {
+    // 分区落地页（hero + 卡片）在带侧边栏的正文列中紧凑呈现。
+    selector: '.doc-content .doc-hero',
+    properties: {
+      padding: '4px 0 28px',
+      maxWidth: 'none',
+      margin: 0,
+      textAlign: 'center',
+    },
+  },
+  {
+    selector: '.doc-content .doc-hero-title',
+    properties: { fontSize: '2.1rem' },
+  },
+  {
+    selector: '.doc-content .doc-hero-subtitle',
+    properties: { fontSize: '1.05rem' },
   },
   {
     selector: '.doc-home',

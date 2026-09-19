@@ -148,12 +148,14 @@ HTTP 4xx / 5xx 不视为异常（与小程序端 success 语义一致），由�
 
 ## 仓库结构
 
-本仓库为 Bun workspace monorepo，包含两个发布包：
+本仓库为 Bun workspace monorepo，包含三个发布包：
 
 ```text
 packages/transone/      核心框架 transone
 packages/transone-cli/  多端编译器 transone-cli（Target 抽象 + CLI）
+packages/transone-ui/   跨端 UI 组件库 transone-ui（17 个受控组件）
 playground/counter/     多端演练项目（M1：Web 可运行）
+playground/ui-demo/     UI 组件演示项目（全部组件 + 受控交互）
 ```
 
 ## 开发命令
@@ -204,24 +206,26 @@ bash scripts/clean-debug-sockets.sh --apply   # 执行
 
 ## 文档
 
-在线文档部署在 GitHub Pages（合并部署，主站 + CLI 子站）：
+在线文档部署在 GitHub Pages（按包拆分为四个分区，路径与包一一对应）：
 
-- 主文档站：<https://geektech-team.github.io/transone/>（框架指南 / 子包文档 / API）
-- CLI 文档子站：<https://geektech-team.github.io/transone/cli/>（transone 命令与配置参考）
+- transone 核心框架：<https://geektech-team.github.io/transone/>（快速开始 / 核心概念 / 六个模块 / API）
+- transone-cli 编译器：<https://geektech-team.github.io/transone/cli/>（命令 / 配置 / 目标端 / 构建 / API）
+- transone-ui 组件库：<https://geektech-team.github.io/transone/ui/>（快速上手 / 主题定制 / 17 个组件）
+- 项目：<https://geektech-team.github.io/transone/project/>（定位与设计 / 目标端矩阵 / 路线图）
+
+侧边栏为父子菜单：父菜单 = 包 / 项目，子菜单 = 包的模块、功能或组件页。
 
 本地开发文档：
 
 ```bash
-bun run docs:dev        # 主文档站开发服务器（端口 52313）
-bun run docs:build      # 构建主文档站产物（docs/dist）
-bun run docs:preview    # 本地预览主文档站
-bun run docs:cli:build  # 构建 CLI 文档子站（packages/transone-cli/docs/dist）
+bun run docs:dev        # 文档站开发服务器（端口 52313）
+bun run docs:build      # 构建文档站产物（docs/dist）
+bun run docs:preview    # 本地预览文档站
 ```
 
-文档站由 @geektech/tsone 构建（`tsone build`，SSR + 静态产物），
-源码在 [docs/](./docs) 与 [packages/transone-cli/docs](./packages/transone-cli/docs)。
-CI 部署见 [.github/workflows/docs-pages.yml](./.github/workflows/docs-pages.yml)：
-主站与 CLI 子站分别以 `--base` 构建后合并为单个 Pages 站点。
+文档站由 transone 构建（`transone build`，SSR + 静态产物），
+源码在 [docs/](./docs)。CI 部署见 [.github/workflows/docs-pages.yml](./.github/workflows/docs-pages.yml)：
+`transone build --base=/transone/` 一次性构建全站（含 cli / ui / project 分区）。
 
 ## 发布前检查
 

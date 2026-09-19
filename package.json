@@ -4,8 +4,7 @@
   "workspaces": [
     "packages/*",
     "playground/*",
-    "docs",
-    "packages/transone-cli/docs"
+    "docs"
   ],
   "scripts": {
     "dev": "bun run --cwd playground/counter dev",
@@ -21,8 +20,7 @@
     "release": "bun scripts/release.ts",
     "docs:dev": "bun run --cwd docs dev",
     "docs:build": "bun run --cwd docs build:web",
-    "docs:preview": "bun run --cwd docs preview",
-    "docs:cli:build": "bun run --cwd packages/transone-cli/docs build:web"
+    "docs:preview": "bun run --cwd docs preview"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

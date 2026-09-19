@@ -528,9 +528,26 @@ export class ElementRenderStrategy<
     newKeys.forEach((event) => {
       if (!oldKeys.has(event) || oldListeners[event] !== newListeners[event]) {
         const { eventName, modifiers } = parseEventName(event);
-        const listener = wrapEventHandler(newListeners[event], modifiers);
-        element.addEventListener(eventName, listener);
-        store.set(event, { eventName, listener });
+        // Web 没有原生 confirm 事件：映射为 keydown + Enter 回车确认，
+        // 与小程序 input 的 bindconfirm 语义一致（textarea 保留换行，不映射）。
+        const isTextarea =
+          typeof element.tagName === 'string' &&
+          element.tagName.toLowerCase() === 'textarea';
+        const domEvent = eventName === 'confirm' && !isTextarea ? 'keydown' : eventName;
+        const listener = wrapEventHandler(
+          (domEventArg: Event) => {
+            if (domEvent === 'keydown') {
+              const key = (domEventArg as KeyboardEvent).key;
+              if (key !== 'Enter') {
+                return;
+              }
+            }
+            newListeners[event](domEventArg);
+          },
+          modifiers
+        );
+        element.addEventListener(domEvent, listener);
+        store.set(event, { eventName: domEvent, listener });
       }
     });
 

@@ -93,6 +93,12 @@ export interface FeatureGridBlock {
   items: Array<{ title: string; description: string }>;
 }
 
+export interface DemoBlock {
+  /** 对应 demos/demoRegistry 的 key（如 'button'、'switch'）。 */
+  type: 'demo';
+  id: string;
+}
+
 export type DocBlock =
   | HeadingBlock
   | ParagraphBlock
@@ -103,17 +109,23 @@ export type DocBlock =
   | CalloutBlock
   | LinkGridBlock
   | HeroBlock
-  | FeatureGridBlock;
+  | FeatureGridBlock
+  | DemoBlock;
 
-export type DocSection = 'guide' | 'packages' | 'reference';
+/**
+ * 文档分区（侧边栏父菜单）：transone / transone-cli / transone-ui / 项目。
+ * 每个分区有一个父级落地页（transone → /，cli → /cli，ui → /ui，project → /project），
+ * 其余页面作为该分区父菜单下的子菜单。
+ */
+export type DocSection = 'transone' | 'cli' | 'ui' | 'project';
 
 export interface DocPage {
-  /** 站点内路由，如 /guide/getting-started/（不含 base）。 */
+  /** 站点内路由，如 /cli/commands/（不含部署 base）。 */
   path: string;
   title: string;
   description: string;
   section: DocSection;
-  /** 侧边栏分组顺序：guide < packages < reference。 */
+  /** 侧边栏内排序：分区落地页为 -1，其余按序递增。 */
   order: number;
   body: DocBlock[];
 }
@@ -173,6 +185,10 @@ export function featureGrid(
   items: FeatureGridBlock['items']
 ): FeatureGridBlock {
   return { type: 'feature-grid', items };
+}
+
+export function demo(id: string): DemoBlock {
+  return { type: 'demo', id };
 }
 
 export const inlineCode = (text: string): InlineCode => ({ kind: 'code', text });
