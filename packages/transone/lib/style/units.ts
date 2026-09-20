@@ -4,16 +4,16 @@
  * 750px 基准居中显示，与小程序设计宽一致）。
  */
 
-/** 根 CSS 变量：--cyy-rpx 为 1rpx 的等效长度 */
+/** 根 CSS 变量：--tu-rpx 为 1rpx 的等效长度 */
 export const ROOT_RPX_RULE =
-  ':root{--cyy-rpx:calc(min(100vw, 750px) / 750);}';
+  ':root{--tu-rpx:calc(min(100vw, 750px) / 750);}';
 
 const RPX_PATTERN = /(-?\d+(?:\.\d+)?)rpx/g;
 
-/** 把字符串/数值中的 `N rpx` 替换为 `calc(N * var(--cyy-rpx))` */
+/** 把字符串/数值中的 `N rpx` 替换为 `calc(N * var(--tu-rpx))` */
 export function convertRpx(value: string | number): string {
   return String(value).replace(
     RPX_PATTERN,
-    (_match, number: string) => `calc(${number} * var(--cyy-rpx))`
+    (_match, number: string) => `calc(${number} * var(--tu-rpx))`
   );
 }
