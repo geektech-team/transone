@@ -14,6 +14,7 @@
       "name": "transone-docs",
       "dependencies": {
         "transone": "workspace:*",
+        "transone-chart": "workspace:*",
         "transone-ui": "workspace:*",
       },
       "devDependencies": {
@@ -23,6 +24,16 @@
     "packages/transone": {
       "name": "transone",
       "version": "0.3.0",
+    },
+    "packages/transone-chart": {
+      "name": "transone-chart",
+      "version": "0.1.2",
+      "devDependencies": {
+        "transone": "workspace:*",
+      },
+      "peerDependencies": {
+        "transone": ">=0.3.0",
+      },
     },
     "packages/transone-cli": {
       "name": "transone-cli",
@@ -43,6 +54,16 @@
       },
       "peerDependencies": {
         "transone": ">=0.1.2",
+      },
+    },
+    "playground/chart-demo": {
+      "name": "transone-playground-chart-demo",
+      "dependencies": {
+        "transone": "workspace:*",
+        "transone-chart": "workspace:*",
+      },
+      "devDependencies": {
+        "transone-cli": "workspace:*",
       },
     },
     "playground/counter": {
@@ -76,9 +97,13 @@
 
     "transone": ["transone@workspace:packages/transone"],
 
+    "transone-chart": ["transone-chart@workspace:packages/transone-chart"],
+
     "transone-cli": ["transone-cli@workspace:packages/transone-cli"],
 
     "transone-docs": ["transone-docs@workspace:docs"],
+
+    "transone-playground-chart-demo": ["transone-playground-chart-demo@workspace:playground/chart-demo"],
 
     "transone-playground-counter": ["transone-playground-counter@workspace:playground/counter"],
 

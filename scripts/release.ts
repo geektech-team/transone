@@ -16,10 +16,12 @@
  *       packages/transone/lib/core/app.ts      version: '...'
  *       packages/transone-cli/src/create.ts    TRANSONE_FRAMEWORK_VERSION / TRANSONE_CLI_VERSION
  *   - 指定 --pkg：被选中的包各自基于自身当前版本独立升版，只同步与该包相关的版本引用：
- *       transone     发布时同步框架版本引用，以及脚手架中的 TRANSONE_FRAMEWORK_VERSION
- *       transone-cli 发布时同步 TRANSONE_CLI_VERSION
- *       transone-ui  仅升版自身 package.json
- *   - 发布顺序固定为 transone → transone-cli → transone-ui（编译器依赖框架，组件库依赖框架）。
+ *       transone      发布时同步框架版本引用，以及脚手架中的 TRANSONE_FRAMEWORK_VERSION
+ *       transone-cli  发布时同步 TRANSONE_CLI_VERSION
+ *       transone-ui   仅升版自身 package.json
+ *       transone-chart 仅升版自身 package.json
+ *   - 发布顺序固定为 transone → transone-cli → transone-ui → transone-chart
+ *     （编译器依赖框架，组件库依赖框架，图表库 peer 依赖框架）。
  *   - 发布使用 Bun 原生 `bun publish`，需要已登录 npm（bun pm whoami 校验）。
  */
 import { spawnSync } from 'node:child_process';
@@ -36,6 +38,11 @@ const PACKAGES = [
     name: 'transone-cli',
   },
   { key: 'transone-ui', dir: 'packages/transone-ui', name: 'transone-ui' },
+  {
+    key: 'transone-chart',
+    dir: 'packages/transone-chart',
+    name: 'transone-chart',
+  },
 ] as const;
 
 type PackageKey = (typeof PACKAGES)[number]['key'];
@@ -61,7 +68,7 @@ function printHelp(): void {
       '',
       '  --pkg <包名>…              只针对指定包升版 + 构建 + 发布',
       '                             可重复传参或用逗号分隔多个包',
-      '                             可选：transone | transone-cli | transone-ui',
+      '                             可选：transone | transone-cli | transone-ui | transone-chart',
       '                             默认（不传）：transone + transone-cli 版本同步',
       '  --bump <major|minor|patch>  升级版本号（默认 patch）',
       '  --no-publish                升版本 + 构建，但不发布',
@@ -72,6 +79,7 @@ function printHelp(): void {
       '  bun run release --bump minor             # minor 升版 + 发布',
       '  bun run release --pkg transone           # 只发布框架 transone',
       '  bun run release --pkg transone-ui        # 只发布组件库 transone-ui',
+      '  bun run release --pkg transone-chart     # 只发布图表库 transone-chart',
       '  bun run release --pkg transone,transone-cli --bump minor',
       '  bun run release --pkg transone --dry-run # 演练',
     ].join('\n')
@@ -229,6 +237,8 @@ function refsFor(key: PackageKey): VersionRef[] {
       ];
     case 'transone-ui':
       return [manifestRef('packages/transone-ui')];
+    case 'transone-chart':
+      return [manifestRef('packages/transone-chart')];
   }
 }
 
@@ -367,7 +377,7 @@ function releaseTargeted(args: CliArgs, targets: PackageKey[]): void {
   console.log('\n全部完成。');
 }
 
-/** 按 PACKAGES 固定顺序发布目标包（编译器依赖框架，组件库依赖框架）。 */
+/** 按 PACKAGES 固定顺序发布目标包（编译器依赖框架，组件库/图表库依赖框架）。 */
 function publishAll(targets: PackageKey[]): void {
   console.log('  校验 npm 登录状态…');
   const whoami = spawnSync('bun', ['pm', 'whoami'], {

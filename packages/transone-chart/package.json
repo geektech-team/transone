@@ -1,0 +1,55 @@
+{
+  "name": "transone-chart",
+  "version": "0.1.2",
+  "description": "TransOne 跨端图表库：一份 TypeScript 源码，基于 Canvas 2D 渲染，兼容 Web 与多端小程序，预留原生 App（iOS/Android/鸿蒙）扩展",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "source": "./lib/index.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./adapters": {
+      "import": "./dist/adapters/index.js",
+      "types": "./dist/adapters/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "build:types": "bunx tsc --project tsconfig.build.json",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "transone": ">=0.3.0"
+  },
+  "devDependencies": {
+    "transone": "workspace:*"
+  },
+  "keywords": [
+    "transone",
+    "chart",
+    "canvas",
+    "cross-platform",
+    "miniprogram",
+    "web",
+    "typescript"
+  ],
+  "homepage": "https://geektech-team.github.io/transone/chart/",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "files": [
+    "dist",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

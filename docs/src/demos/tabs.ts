@@ -24,7 +24,7 @@ export class DemoTabs extends DemoHost<DemoTabsState> {
       component: TuTabs,
       props: { items: ITEMS, active: this.state.active },
       emitters: {
-        change: (index: number) => this.setState({ active: index }),
+        change: (...args: unknown[]) => this.setState({ active: args[0] as number }),
       },
     }) as unknown as VNode;
   }

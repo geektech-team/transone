@@ -1,4 +1,5 @@
 import type { DocPage, DocSection } from './types';
+import { homePage } from './home';
 import {
   transoneLandingPage,
   gettingStartedPage,
@@ -45,6 +46,13 @@ import {
   uiNavbarPage,
 } from './transone-ui-modules';
 import {
+  chartLandingPage,
+  chartGettingStartedPage,
+  chartArchitecturePage,
+  chartChartsPage,
+  chartCrossPlatformPage,
+} from './transone-chart';
+import {
   projectLandingPage,
   positioningPage,
   targetsPage,
@@ -54,14 +62,18 @@ import {
 /**
  * 全部文档页。
  *
- * 按包拆分为四个父级分区，每个分区一个落地页（父菜单）+ 若干子页（子菜单）：
- * - transone（/）：核心框架 —— 快速开始、核心概念、六个模块、API 概览
- * - transone-cli（/cli）：多端编译器 —— 快速开始、命令、配置、目标端、构建、API
- * - transone-ui（/ui）：UI 组件库 —— 快速上手、主题定制、17 个组件
- * - 项目（/project）：定位与设计、目标端矩阵、路线图
+ * 按子包拆分为独立分区，主页（/）只做入口：
+ * - 主页（/）：各子包入口卡片，不展示任何子包内容
+ * - transone（/transone/）：核心框架 —— 快速开始、核心概念、六个模块、API 概览
+ * - transone-cli（/cli/）：多端编译器 —— 快速开始、命令、配置、目标端、构建、API
+ * - transone-ui（/ui/）：UI 组件库 —— 快速上手、主题定制、17 个组件
+ * - transone-chart（/transone-chart/）：图表库 —— 快速开始、架构、图表 API、跨端集成
+ * - 项目（/project/）：定位与设计、目标端矩阵、路线图
  */
 export const docsPages: DocPage[] = [
-  // ---- transone 核心框架（父菜单 /）----
+  // ---- 主页（/）：子包入口 ----
+  homePage,
+  // ---- transone 核心框架（父菜单 /transone/）----
   transoneLandingPage,
   gettingStartedPage,
   coreConceptsPage,
@@ -101,6 +113,12 @@ export const docsPages: DocPage[] = [
   uiEmptyPage,
   uiTabsPage,
   uiNavbarPage,
+  // ---- transone-chart 图表库（父菜单 /transone-chart/）----
+  chartLandingPage,
+  chartGettingStartedPage,
+  chartArchitecturePage,
+  chartChartsPage,
+  chartCrossPlatformPage,
   // ---- 项目（父菜单 /project/）----
   projectLandingPage,
   positioningPage,
@@ -108,22 +126,32 @@ export const docsPages: DocPage[] = [
   roadmapPage,
 ];
 
-/** 侧边栏父菜单顺序。 */
-export const SECTION_ORDER: DocSection[] = ['transone', 'cli', 'ui', 'project'];
+/** 顶栏 / 侧边栏父菜单顺序（home 只在主页展示，不参与分区导航）。 */
+export const SECTION_ORDER: DocSection[] = [
+  'transone',
+  'cli',
+  'ui',
+  'chart',
+  'project',
+];
 
 /** 父菜单标题（即落地页链接文案）。 */
 export const SECTION_TITLES: Record<DocSection, string> = {
+  home: '主页',
   transone: 'transone',
   cli: 'transone-cli',
   ui: 'transone-ui',
+  chart: 'transone-chart',
   project: '项目',
 };
 
 /** 父菜单落地页路由（不含部署 base）。 */
 export const SECTION_PATHS: Record<DocSection, string> = {
-  transone: '/',
+  home: '/',
+  transone: '/transone',
   cli: '/cli',
   ui: '/ui',
+  chart: '/transone-chart',
   project: '/project',
 };
 

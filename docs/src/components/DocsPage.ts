@@ -101,6 +101,16 @@ export class DocsPage extends Component<DocsPageProps, object> {
   private renderBody(page: NonNullable<ReturnType<typeof findPage>>): VNode {
     const article = createComponent(DocArticle, { blocks: page.body }) as VNode;
     const isLanding = page.order === -1;
+    const isHome = page.section === 'home';
+
+    // 主页（/）：全宽居中布局，只展示子包入口卡片，无侧边栏。
+    if (isHome) {
+      return {
+        tag: 'main',
+        props: { className: 'doc-home' },
+        children: [article],
+      };
+    }
 
     return {
       tag: 'main',

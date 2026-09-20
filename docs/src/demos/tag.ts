@@ -30,8 +30,8 @@ export class DemoTags extends DemoHost<DemoTagsState> {
             props: { type: tag.type, closable: true, name: index },
             children: [tag.text],
             emitters: {
-              close: (name: number) => {
-                const visible = [...this.state.visible];
+              close: (...args: unknown[]) => {
+                const name = args[0] as number; const visible = [...this.state.visible];
                 visible[name] = false;
                 this.setState({ visible });
               },

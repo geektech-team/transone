@@ -34,8 +34,10 @@ export class DemoActionSheet extends DemoHost<DemoActionSheetState> {
           component: TuActionSheet,
           props: { visible: s.visible, actions: ACTIONS },
           emitters: {
-            select: (index: number) =>
-              this.setState({ visible: false, selected: ACTIONS[index].name }),
+            select: (...args: unknown[]) => {
+              const index = args[0] as number;
+              this.setState({ visible: false, selected: ACTIONS[index].name });
+            },
             cancel: () => this.setState({ visible: false }),
           },
         }) as unknown as VNode,

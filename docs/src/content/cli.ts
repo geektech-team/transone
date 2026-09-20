@@ -100,7 +100,7 @@ export const cliLandingPage: DocPage = {
       'info',
       [
         '编译器与核心框架配合使用：',
-        link('transone 核心框架', '/'),
+        link('transone 核心框架', '/transone'),
         ' 提供响应式 / 组件 / 渲染 / 路由 / 样式，',
         link('transone-ui', '/ui'),
         ' 提供跨端组件库。',

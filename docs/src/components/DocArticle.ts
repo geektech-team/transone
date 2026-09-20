@@ -1,4 +1,9 @@
-import { Component, createComponent, type VNode } from 'transone';
+import {
+  Component,
+  createComponent,
+  type ComponentConstructor,
+  type VNode,
+} from 'transone';
 import { demoRegistry } from '../demos';
 import type {
   DocBlock,
@@ -15,9 +20,17 @@ function isInlineArray(value: InlineNode[] | DocBlock): value is InlineNode[] {
  * 页面标题与描述由 DocsPage 布局渲染，因此正文开头的 heading(1)
  * 会被跳过（避免重复标题），其余 heading 依次降级为 h2/h3/h4。
  */
-export class DocArticle extends Component<{ blocks: DocBlock[] }, object> {
-  protected initState(): object {
-    return {};
+interface DocArticleState {
+  /** 已展开源码的 demo id 集合。 */
+  expanded: Record<string, boolean>;
+}
+
+export class DocArticle extends Component<
+  { blocks: DocBlock[] },
+  DocArticleState
+> {
+  protected initState(): DocArticleState {
+    return { expanded: {} };
   }
 
   protected initStyles(): void {}
@@ -47,10 +60,44 @@ export class DocArticle extends Component<{ blocks: DocBlock[] }, object> {
         return { tag: 'p', children: this.renderInline(block.content) };
 
       case 'demo': {
-        const Demo = demoRegistry[block.id];
-        return Demo
-          ? (createComponent({ component: Demo }) as VNode)
-          : { tag: 'div' };
+        const Demo = demoRegistry[block.id] as ComponentConstructor | undefined;
+        const expanded = !!this.state.expanded[block.id];
+        return {
+          tag: 'div',
+          props: { className: 'doc-demo' },
+          children: [
+            Demo ? (createComponent(Demo) as VNode) : { tag: 'div' },
+            ...(block.source
+              ? [
+                  {
+                    tag: 'button',
+                    props: {
+                      className: 'doc-demo-toggle',
+                      onClick: () =>
+                        this.setState({
+                          expanded: {
+                            ...this.state.expanded,
+                            [block.id]: !expanded,
+                          },
+                        }),
+                    },
+                    children: [expanded ? '收起源代码' : '查看源代码'],
+                  },
+                  ...(expanded
+                    ? [
+                        {
+                          tag: 'pre',
+                          props: { className: 'doc-demo-source' },
+                          children: [
+                            { tag: 'code', children: [block.source] },
+                          ],
+                        },
+                      ]
+                    : []),
+                ]
+              : []),
+          ],
+        };
       }
 
       case 'code':

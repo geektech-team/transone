@@ -94,9 +94,11 @@ export interface FeatureGridBlock {
 }
 
 export interface DemoBlock {
-  /** 对应 demos/demoRegistry 的 key（如 'button'、'switch'）。 */
+  /** 对应 demos/demoRegistry 的 key（如 'button'、'switch'、'chart-line'）。 */
   type: 'demo';
   id: string;
+  /** 示例源码（可选）：渲染"查看源代码"折叠区时展示。 */
+  source?: string;
 }
 
 export type DocBlock =
@@ -113,11 +115,20 @@ export type DocBlock =
   | DemoBlock;
 
 /**
- * 文档分区（侧边栏父菜单）：transone / transone-cli / transone-ui / 项目。
- * 每个分区有一个父级落地页（transone → /，cli → /cli，ui → /ui，project → /project），
- * 其余页面作为该分区父菜单下的子菜单。
+ * 文档分区（侧边栏父菜单）：transone / transone-cli / transone-ui /
+ * transone-chart / 项目。
+ * 每个子包分区有一个父级落地页（transone → /transone/，cli → /cli/，
+ * ui → /ui/，transone-chart → /transone-chart/，project → /project/），
+ * 其余页面作为该分区父菜单下的子菜单。主页（/）为独立分区 home，
+ * 只展示各子包入口，不参与侧边栏与顶栏分区导航。
  */
-export type DocSection = 'transone' | 'cli' | 'ui' | 'project';
+export type DocSection =
+  | 'home'
+  | 'transone'
+  | 'cli'
+  | 'ui'
+  | 'chart'
+  | 'project';
 
 export interface DocPage {
   /** 站点内路由，如 /cli/commands/（不含部署 base）。 */
@@ -187,8 +198,8 @@ export function featureGrid(
   return { type: 'feature-grid', items };
 }
 
-export function demo(id: string): DemoBlock {
-  return { type: 'demo', id };
+export function demo(id: string, source?: string): DemoBlock {
+  return { type: 'demo', id, ...(source ? { source } : {}) };
 }
 
 export const inlineCode = (text: string): InlineCode => ({ kind: 'code', text });

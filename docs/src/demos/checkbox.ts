@@ -17,7 +17,7 @@ export class DemoCheckbox extends DemoHost<DemoCheckboxState> {
       component: TuCheckbox,
       props: { checked: this.state.checked, label: '同意用户协议' },
       emitters: {
-        change: (checked: boolean) => this.setState({ checked }),
+        change: (...args: unknown[]) => this.setState({ checked: args[0] as boolean }),
       },
     }) as unknown as VNode;
   }

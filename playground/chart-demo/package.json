@@ -1,0 +1,20 @@
+{
+  "name": "transone-playground-chart-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "transone dev",
+    "build:web": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target web",
+    "build:weixin": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-weixin",
+    "build:alipay": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-alipay",
+    "build:bytedance": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-bytedance",
+    "preview": "bun scripts/preview.ts"
+  },
+  "dependencies": {
+    "transone": "workspace:*",
+    "transone-chart": "workspace:*"
+  },
+  "devDependencies": {
+    "transone-cli": "workspace:*"
+  }
+}

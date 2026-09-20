@@ -23,8 +23,8 @@ export class DemoSearchBar extends DemoHost<DemoSearchBarState> {
         confirmType: 'search',
       },
       emitters: {
-        input: (value: string) => this.setState({ value }),
-        search: (value: string) => this.setState({ keyword: value }),
+        input: (...args: unknown[]) => this.setState({ value: args[0] as string }),
+        search: (...args: unknown[]) => this.setState({ keyword: args[0] as string }),
       },
     }) as unknown as VNode;
   }

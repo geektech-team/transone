@@ -17,7 +17,7 @@ export class DemoRadio extends DemoHost<DemoRadioState> {
       component: TuRadio,
       props: { checked: this.state.checked, label: '选择此项' },
       emitters: {
-        change: (checked: boolean) => this.setState({ checked }),
+        change: (...args: unknown[]) => this.setState({ checked: args[0] as boolean }),
       },
     }) as unknown as VNode;
   }

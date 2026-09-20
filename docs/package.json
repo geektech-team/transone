@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "transone": "workspace:*",
-    "transone-ui": "workspace:*"
+    "transone-ui": "workspace:*",
+    "transone-chart": "workspace:*"
   },
   "devDependencies": {
     "transone-cli": "workspace:*"

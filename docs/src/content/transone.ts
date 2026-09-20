@@ -18,10 +18,10 @@ import {
 
 const GITHUB_URL = 'https://github.com/geektech-team/transone';
 
-// ---- 落地页（父菜单 transone，路径 /）----
+// ---- 落地页（父菜单 transone，路径 /transone）----
 
 export const transoneLandingPage: DocPage = {
-  path: '/',
+  path: '/transone',
   title: 'transone 核心框架',
   description: '跨端前端框架：一份 TypeScript 源码，编译期静态转换为 Web 与多端小程序原生产物，产物不携带框架运行时。',
   section: 'transone',
@@ -32,7 +32,7 @@ export const transoneLandingPage: DocPage = {
       '一套 TypeScript 源码，多端原生产物',
       'transone 通过编译期静态转换（transpile / transform），把同一份 TypeScript 源码输出为 Web 与微信 / 阿里 / 字节小程序原生工程；响应式、类组件、策略化渲染、路由与样式全内置，产物不携带框架运行时。',
       [
-        { label: '快速开始', href: '/getting-started', primary: true },
+        { label: '快速开始', href: '/transone/getting-started', primary: true },
         { label: 'CLI 编译器', href: '/cli' },
         { label: 'GitHub', href: GITHUB_URL },
       ]
@@ -76,54 +76,54 @@ export const transoneLandingPage: DocPage = {
       {
         title: '快速开始',
         description: '安装、应用骨架、组件示例与多端构建命令。',
-        href: '/getting-started',
+        href: '/transone/getting-started',
       },
       {
         title: '核心概念',
         description: '响应式、组件模型、渲染策略、路由与样式的设计概览。',
-        href: '/core-concepts',
+        href: '/transone/core-concepts',
       },
       {
         title: '应用与组件模型',
         description: 'createApp / OneApp、插件、组件基类、生命周期与数据模型表单。',
-        href: '/application',
+        href: '/transone/application',
       },
       {
         title: '响应式系统',
         description: 'reactive / ref / computed / effect / watch，细粒度依赖收集与批处理调度。',
-        href: '/reactivity',
+        href: '/transone/reactivity',
       },
       {
         title: '渲染层与模板',
         description: 'VNode 模型、元素工厂、策略化渲染分发与文本模板引擎。',
-        href: '/renderer',
+        href: '/transone/renderer',
       },
       {
         title: '路由',
         description: 'createRouter、导航守卫、RouterLink / RouterView 与 history / hash 双模式。',
-        href: '/router',
+        href: '/transone/router',
       },
       {
         title: '样式系统',
         description: 'StyleManager 组件样式、StyleSheet 数据化样式表与 rpx 多端单位。',
-        href: '/style',
+        href: '/transone/style',
       },
       {
         title: '服务端渲染与 DOM',
         description: 'renderHtmlDocument 文档壳、SSR 同构形态与零依赖 DOM 模拟。',
-        href: '/ssr',
+        href: '/transone/ssr',
       },
       {
         title: 'API 概览',
         description: '公开 API 分组速览（详细签名以 dist 类型定义为准）。',
-        href: '/api',
+        href: '/transone/api',
       },
     ]),
     callout(
       'info',
       [
         'One 家族：TSone（前端框架）· TransOne（跨端框架）· BackOne（后端框架）。',
-        '本仓库还包含 transone-cli 多端编译器与 transone-ui 跨端组件库，见对应父菜单。',
+        '本仓库还包含 transone-cli 多端编译器、transone-ui 跨端组件库与 transone-chart 跨端图表库，入口见主页。',
       ],
       '家族'
     ),
@@ -133,7 +133,7 @@ export const transoneLandingPage: DocPage = {
 // ---- 快速开始 ----
 
 export const gettingStartedPage: DocPage = {
-  path: '/getting-started',
+  path: '/transone/getting-started',
   title: '快速开始',
   description: '安装 transone、理解应用入口约定，并把同一份源码构建到多个目标端。',
   section: 'transone',
@@ -237,7 +237,7 @@ transone dev --base /transone/  # 以子路径模式预览（与线上部署一�
     heading(2, '下一步'),
     ul([
       [
-        link('核心概念', '/core-concepts'),
+        link('核心概念', '/transone/core-concepts'),
         '：响应式系统、组件模型、渲染策略、路由与样式。',
       ],
       [
@@ -255,7 +255,7 @@ transone dev --base /transone/  # 以子路径模式预览（与线上部署一�
 // ---- 核心概念 ----
 
 export const coreConceptsPage: DocPage = {
-  path: '/core-concepts',
+  path: '/transone/core-concepts',
   title: '核心概念',
   description: '响应式系统、组件模型、策略化渲染、路由与样式的设计概览。',
   section: 'transone',
@@ -346,8 +346,8 @@ export const coreConceptsPage: DocPage = {
     ),
     heading(2, '下一步'),
     ul([
-      [link('模块文档', '/'), '：应用与组件模型、响应式、渲染、路由、样式、SSR 逐一深入。'],
-      [link('API 概览', '/api'), '：公开 API 分组速览。'],
+      [link('模块文档', '/transone'), '：应用与组件模型、响应式、渲染、路由、样式、SSR 逐一深入。'],
+      [link('API 概览', '/transone/api'), '：公开 API 分组速览。'],
       [link('CLI 编译器', '/cli'), '：如何把同一份源码构建到多端。'],
     ]),
   ],
@@ -356,7 +356,7 @@ export const coreConceptsPage: DocPage = {
 // ---- API 概览 ----
 
 export const apiOverviewPage: DocPage = {
-  path: '/api',
+  path: '/transone/api',
   title: 'API 概览',
   description: 'transone 公开 API 分组速览（详细签名以 dist 类型定义为准）。',
   section: 'transone',

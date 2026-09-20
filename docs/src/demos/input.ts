@@ -17,7 +17,7 @@ export class DemoInput extends DemoHost<DemoInputState> {
       component: TuInput,
       props: { value: this.state.value, placeholder: '请输入…', clearable: true },
       emitters: {
-        input: (value: string) => this.setState({ value }),
+        input: (...args: unknown[]) => this.setState({ value: args[0] as string }),
       },
     }) as unknown as VNode;
   }

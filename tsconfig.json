@@ -14,7 +14,8 @@
       "transone/dom": ["packages/transone/lib/dom/index.ts"],
       "transone/request": ["packages/transone/lib/request/index.ts"],
       "transone-ui": ["packages/transone-ui/lib/index.ts"],
-      "transone-cli": ["packages/transone-cli/src/index.ts"]
+      "transone-cli": ["packages/transone-cli/src/index.ts"],
+      "transone-chart": ["packages/transone-chart/lib/index.ts"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
@@ -38,10 +39,14 @@
     "packages/transone-ui/tests",
     "packages/transone-cli/src",
     "packages/transone-cli/tests",
+    "packages/transone-chart/lib",
+    "packages/transone-chart/tests",
     "playground/counter/src",
     "playground/counter/transone.config.ts",
     "playground/ui-demo/src",
     "playground/ui-demo/transone.config.ts",
+    "playground/chart-demo/src",
+    "playground/chart-demo/transone.config.ts",
     "docs/src",
     "docs/tsone.config.ts"
   ],

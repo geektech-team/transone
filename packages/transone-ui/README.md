@@ -1,29 +1,32 @@
 # transone-ui
 
-跨端 UI 组件库：**一份 TypeScript 源码**，经 [transone-cli](https://www.npmjs.com/package/transone-cli) 静态编译为 Web 与小程序（微信 / 阿里 / 字节）原生产物。
+**English** · [简体中文](./README.zh-CN.md)
 
-组件（17 个，四类）：
+Cross-platform UI component library: **one TypeScript source** statically compiled by [`transone-cli`](https://www.npmjs.com/package/transone-cli) into Web and mini-program (WeChat / Alipay / ByteDance) native output.
 
-- **反馈**：`TuToast`（top / center / bottom 轻提示）、`TuModal`（确认弹窗）、`TuActionSheet`（底部动作面板）
-- **表单**：`TuCheckbox`（自绘复选框）、`TuRadio`（自绘单选框）、`TuSearchBar`（搜索栏）、`TuInput`（输入框）、`TuSwitch`（开关）
-- **展示**：`TuBadge`（徽标，超 max 显示 max+）、`TuCell`（单元格）、`TuEmpty`（空状态）、`TuTag`（标签）、`TuProgress`（进度条）
-- **导航**：`TuTabs`（标签页）、`TuNavbar`（导航栏）、`TuPopup`（top / right / bottom / left 四向弹出）
+17 controlled components in five groups:
 
-全部组件为受控组件，API 与用法见 docs 站（`docs/` 或 `npm i transone-ui` 后查看）与 `playground/ui-demo` 演示。
+- **Basic**: `TuButton` — button with type / size / loading / plain / round variants
+- **Feedback**: `TuToast` (top / center / bottom toast), `TuModal` (confirm dialog), `TuActionSheet` (bottom action sheet)
+- **Form**: `TuCheckbox` (custom checkbox), `TuRadio` (custom radio), `TuSearchBar` (search bar), `TuInput` (input), `TuSwitch` (switch)
+- **Display**: `TuBadge` (badge, renders `max+` beyond the cap), `TuCell` (cell), `TuEmpty` (empty state), `TuTag` (tag), `TuProgress` (progress bar)
+- **Navigation**: `TuTabs` (tabs), `TuNavbar` (navbar), `TuPopup` (top / right / bottom / left popup)
 
-- 运行时：依赖 `transone`（>= 0.1.2，peerDependency）
-- 包名：`transone-ui`（无 scope）
-- 版本：0.1.0
-- 技术栈：Bun + 纯 TypeScript，零运行时依赖（仅依赖 transone 本身）
+All components are **fully controlled**: state lives in the parent; interactions are reported back through custom events (`click` / `change` / `input` / `close` ...) that the parent subscribes to via `emitters`. See the docs site (`docs/` or after `npm i transone-ui`) and the `playground/ui-demo` demo for API details and usage.
 
-## 安装
+- Runtime: depends on `transone` (>= 0.1.2, peer dependency)
+- Package: `transone-ui` (unscoped)
+- Version: 0.4.0
+- Stack: Bun + pure TypeScript, zero runtime dependencies (only depends on `transone` itself)
+
+## Install
 
 ```bash
 bun add transone-ui
-# 或 npm / pnpm / yarn
+# or npm / pnpm / yarn
 ```
 
-## 快速上手
+## Quick start
 
 ```ts
 import { Component, createComponent, h } from 'transone';
@@ -44,13 +47,13 @@ class MyPage extends Component {
       createComponent({
         component: TuButton,
         props: { type: 'primary' },
-        children: ['打开弹层'],
+        children: ['Open popup'],
         emitters: { click: () => (this.state.popupVisible = true) },
       }),
       createComponent({
         component: TuPopup,
         props: { visible: this.state.popupVisible, position: 'bottom' },
-        children: [h('div', {}, ['弹层内容'])],
+        children: [h('div', {}, ['Popup content'])],
         emitters: { close: () => (this.state.popupVisible = false) },
       }),
     ]);
@@ -58,137 +61,135 @@ class MyPage extends Component {
 }
 ```
 
-> 组件全部为**受控组件**：状态由父级维护，交互通过 `click` / `change` / `input` / `close` 等自定义事件回传，父级用 `emitters` 订阅。
-
-## 组件 API
+## Component API
 
 ### TuButton
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `type` | `default \| primary \| success \| warning \| danger` | `default` | 类型 |
-| `size` | `small \| medium \| large` | `medium` | 尺寸 |
-| `disabled` | `boolean` | `false` | 禁用，不响应点击 |
-| `loading` | `boolean` | `false` | 加载中，内容替换为 `loadingText` |
-| `loadingText` | `string` | `加载中…` | 加载文案 |
-| `block` | `boolean` | `false` | 块级（占满父容器宽度） |
-| `plain` | `boolean` | `false` | 朴素（透明底 + 描边） |
-| `round` | `boolean` | `false` | 圆角胶囊 |
-| `children` | `Array<VNode \| string>` | — | 按钮内容（插槽） |
+| `type` | `default \| primary \| success \| warning \| danger` | `default` | Button variant |
+| `size` | `small \| medium \| large` | `medium` | Size |
+| `disabled` | `boolean` | `false` | Disabled; does not respond to clicks |
+| `loading` | `boolean` | `false` | Loading; content replaced by `loadingText` |
+| `loadingText` | `string` | `加载中…` | Text shown while loading (default text is Chinese; override as needed) |
+| `block` | `boolean` | `false` | Block-level (full parent width) |
+| `plain` | `boolean` | `false` | Plain style (transparent background + outline) |
+| `round` | `boolean` | `false` | Pill-shaped corners |
+| `children` | `Array<VNode \| string>` | — | Button content (slot) |
 
-事件：`click`（disabled / loading 时不触发）。
+Events: `click` (not fired when `disabled` / `loading`).
 
 ### TuSwitch
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `checked` | `boolean` | `false` | 选中态（受控） |
-| `disabled` | `boolean` | `false` | 禁用 |
-| `activeColor` | `string` | `var(--tu-primary, #1677ff)` | 选中轨道颜色 |
-| `size` | `small \| medium \| large` | `medium` | 尺寸 |
+| `checked` | `boolean` | `false` | Checked state (controlled) |
+| `disabled` | `boolean` | `false` | Disabled |
+| `activeColor` | `string` | `var(--tu-primary, #1677ff)` | Track color when on |
+| `size` | `small \| medium \| large` | `medium` | Size |
 
-事件：`change`，回传切换后的布尔值（`!checked`）。
+Events: `change`, reports the toggled boolean value (`!checked`).
 
 ### TuTag
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `type` | `default \| primary \| success \| warning \| danger \| info` | `default` | 类型 |
-| `plain` | `boolean` | `false` | 朴素样式 |
-| `round` | `boolean` | `false` | 圆角胶囊 |
-| `closable` | `boolean` | `false` | 显示关闭按钮 |
-| `name` | `string \| number` | — | 关闭时回传的标识，用于列表删除场景 |
+| `type` | `default \| primary \| success \| warning \| danger \| info` | `default` | Variant |
+| `plain` | `boolean` | `false` | Plain style |
+| `round` | `boolean` | `false` | Pill-shaped corners |
+| `closable` | `boolean` | `false` | Show a close button |
+| `name` | `string \| number` | — | Identifier reported on close, for list-removal scenarios |
 
-事件：`close`，回传 `name`。
+Events: `close`, reports `name`.
 
 ### TuProgress
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `percent` | `number` | `0` | 进度 0–100（越界自动收敛） |
-| `showText` | `boolean` | `true` | 显示百分比文字 |
-| `textInside` | `boolean` | `false` | 文字置于条内 |
-| `strokeWidth` | `number` | `8` | 轨道高度（px） |
-| `color` | `string` | `var(--tu-primary, #1677ff)` | 进度条颜色 |
-| `trackColor` | `string` | `var(--tu-track, #ebedf0)` | 轨道颜色 |
+| `percent` | `number` | `0` | Progress 0–100 (clamped automatically) |
+| `showText` | `boolean` | `true` | Show the percentage text |
+| `textInside` | `boolean` | `false` | Text inside the bar |
+| `strokeWidth` | `number` | `8` | Track height (px) |
+| `color` | `string` | `var(--tu-primary, #1677ff)` | Bar color |
+| `trackColor` | `string` | `var(--tu-track, #ebedf0)` | Track color |
 
 ### TuInput
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `value` | `string` | `''` | 输入值（受控） |
-| `placeholder` | `string` | — | 占位文案 |
-| `type` | `text \| password \| number` | `text` | 输入类型 |
-| `disabled` | `boolean` | `false` | 禁用 |
-| `readonly` | `boolean` | `false` | 只读（小程序端映射为 disabled） |
-| `maxlength` | `number` | — | 最大长度 |
-| `clearable` | `boolean` | `false` | 非空时显示清空按钮 |
-| `size` | `small \| medium \| large` | `medium` | 尺寸 |
+| `value` | `string` | `''` | Input value (controlled) |
+| `placeholder` | `string` | — | Placeholder text |
+| `type` | `text \| password \| number` | `text` | Input type |
+| `disabled` | `boolean` | `false` | Disabled |
+| `readonly` | `boolean` | `false` | Read-only (maps to `disabled` on mini-program targets) |
+| `maxlength` | `number` | — | Max length |
+| `clearable` | `boolean` | `false` | Show a clear button when non-empty |
+| `size` | `small \| medium \| large` | `medium` | Size |
 
-事件：`input` / `change` / `focus` / `blur` / `confirm`。`input` 与 `change` 回传字符串值（已归一化 Web 的 `e.target.value` 与小程序 `e.detail.value`）；点击清空按钮回传 `''`。
+Events: `input` / `change` / `focus` / `blur` / `confirm`. `input` and `change` report a normalized string (Web `e.target.value` and mini-program `e.detail.value` are unified); clearing the input reports `''`.
 
 ### TuPopup
 
-| 属性 | 类型 | 默认 | 说明 |
+| Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `visible` | `boolean` | `false` | 是否显示（受控） |
-| `position` | `top \| right \| bottom \| left` | `bottom` | 弹出方向 |
-| `mask` | `boolean` | `true` | 显示遮罩 |
-| `maskClosable` | `boolean` | `true` | 点击遮罩关闭（触发 `close`） |
-| `round` | `boolean` | `false` | 面板圆角（底部/顶部弹出时生效） |
-| `children` | `Array<VNode \| string>` | — | 面板内容（插槽） |
+| `visible` | `boolean` | `false` | Whether shown (controlled) |
+| `position` | `top \| right \| bottom \| left` | `bottom` | Popup direction |
+| `mask` | `boolean` | `true` | Show the mask |
+| `maskClosable` | `boolean` | `true` | Close on mask click (fires `close`) |
+| `round` | `boolean` | `false` | Rounded panel (applies to bottom / top popups) |
+| `children` | `Array<VNode \| string>` | — | Panel content (slot) |
 
-事件：`close`。隐藏态通过 CSS `visibility` + `transform` + `transition` 实现，`pointer-events: none` 隔离交互；动画时长由主题令牌控制。
+Events: `close`. Hidden state is implemented with CSS `visibility` + `transform` + `transition`, with `pointer-events: none` isolating interactions; animation duration is driven by theme tokens.
 
-## 跨端注意事项
+## Cross-platform notes
 
-1. **插槽内的动态文本**：小程序端插槽内容编译在父级 wxml 中、绑定父级数据；Web 端插槽内容绑定的是**组件自身**的 state（组件 state 为空时 `{{}}` 渲染为空）。因此**不要在组件 children 插槽里写 `{{xxx}}` 模板插值**，改用模板表达式字符串，例如 `` [`计数：${this.state.count}`] ``（双端都编译/渲染正确），或将动态文本放在页面的直属节点上。
-2. **`each()` 返回数组**：作为 children 时直接传入（`h('div', {}, each(...))`），不要再包一层数组字面量（Web 渲染器只铺一层 children）。
-3. **子节点类型**：`children` 只接受 `VNode | string`；需要数字时先转字符串（模板表达式自动转换）。
-4. **标签映射**：`div` → `view`、`span` → `text`；小程序端 `text` 内不能放 `view`/`slot`，所以 `TuTag` 根节点使用 `div`。
-5. **事件回传**：组件用 `emit(name, ...args)` 回传，父级用 `createComponent({ ..., emitters: { name: (v) => this.handle(v) } })` 订阅（对象形式）。小程序端编译为页面的包装方法并绑定 `bind:name`，同名事件自动加序号避免覆盖。
-6. **模板插值求值**：组件内部渲染（非插槽部分）不要使用 `{{}}`，一律通过 props 传入数据。
-7. **CSS 变量**：小程序端不支持运行时注入 CSS 变量，组件内联默认值保证开箱即用；如需定制，在 `app.wxss` 的 `page` 选择器里覆盖同名变量即可（见下节）。
+1. **Dynamic text in slots**: on mini-program targets, slot content is compiled into the parent's wxml and bound to the parent's data; on Web it binds to the **component's own** state (empty component state renders `{{}}` as empty). Therefore **do not write `{{xxx}}` template interpolation inside component `children` slots** — use template expression strings such as `` [`count: ${this.state.count}`] `` (compiles / renders correctly on both), or place dynamic text on page-level nodes.
+2. **`each()` returns an array**: pass it directly as children (`h('div', {}, each(...))`) — do not wrap it in another array literal (the Web renderer only flattens one level of children).
+3. **Child node types**: `children` only accepts `VNode | string`; convert numbers to strings first (template expressions do this automatically).
+4. **Tag mapping**: `div` → `view`, `span` → `text`; on mini-program targets `text` cannot contain `view` / `slot`, so `TuTag` uses a `div` root.
+5. **Event reporting**: components report with `emit(name, ...args)`; the parent subscribes via `createComponent({ ..., emitters: { name: (v) => this.handle(v) } })` (object form). On mini-program targets this compiles to wrapper methods bound with `bind:name`; same-name events are auto-suffixed to avoid collisions.
+6. **Template interpolation evaluation**: inside component rendering (non-slot parts), avoid `{{}}`; always pass data in through props.
+7. **CSS variables**: mini-program targets cannot inject CSS variables at runtime; components inline default values so they work out of the box. To customize, override the same variables on the `page` selector in `app.wxss` (see below).
 
-### 小程序端样式与交互适配要点
+### Mini-program style & interaction adaptation
 
-组件库面向微信 / 阿里 / 字节三端小程序做了以下适配，新增组件均需遵守：
+The library adapts to WeChat / Alipay / ByteDance mini-programs as follows — new components must follow these rules:
 
-- **间距不用 flex `gap`**：老内核 WebView 对 `gap` 支持不稳定，组件内间距一律用子元素 `margin` 实现（如 `Checkbox/Radio` 的 label、`Cell` 的右侧值、`Navbar` 的箭头、`Empty` 的各区块）。
-- **避免高级选择器**：wxss 仅保证基础选择器稳定可用，不在样式里使用 `:not()` 等；需要条件样式时用类名（`--checked` / `--visible` 等）或 `directions.show` 切换。
-- **安全区双声明**：`env(safe-area-inset-bottom)` 带 fallback 第二参数的写法在部分端解析失败，先写固定值兜底、再写 `calc(env(safe-area-inset-bottom) + Npx)` 覆盖（见 `ActionSheet`）。
-- **列表取数用 `dataIndex` 属性**：`h(..., { dataIndex: index }, [], { click: (e) => this.onTap(e) })`——mp 编译为 `data-index="{{index}}"`，Web 端自动转为 `data-index`，回调统一从 `e.currentTarget.dataset.index` 读取（`Tabs` / `ActionSheet`）。
-- **搜索确认键**：`TuSearchBar` 提供 `confirmType`（小程序键盘确认键文案，如 `'search'`），Web 端忽略；回车触发 `search` 事件。
-- **行内 style 的 CSS 变量**：若端上不解析行内 `var()`，同属性在 wxss 类中有默认值兜底，定制主题优先在 `app.wxss` 覆盖令牌。
-- **弹层定位**：`Toast` / `Modal` / `ActionSheet` / `Popup` 使用 `position: fixed` 渲染于组件内部，层级统一为 `--tu-popup-z-index`（默认 1000），避免与页面内容互相遮挡。
+- **No flex `gap` for spacing**: old WebView kernels are unstable with `gap`; use child `margin` instead (e.g. `Checkbox` / `Radio` labels, `Cell` right value, `Navbar` arrow, `Empty` blocks).
+- **Avoid advanced selectors**: wxss only guarantees basic selectors; do not use `:not()` etc. in styles — use modifier class names (`--checked` / `--visible`) or `directions.show` to switch conditional styles.
+- **Safe-area double declaration**: `env(safe-area-inset-bottom)` with a fallback second argument fails to parse on some targets — write a fixed value first, then override with `calc(env(safe-area-inset-bottom) + Npx)` (see `ActionSheet`).
+- **List items use the `dataIndex` prop**: `h(..., { dataIndex: index }, [], { click: (e) => this.onTap(e) })` — compiles to `data-index="{{index}}"` on mini-program targets and is converted to `data-index` on Web; callbacks read `e.currentTarget.dataset.index` uniformly (`Tabs` / `ActionSheet`).
+- **Search confirm key**: `TuSearchBar` offers `confirmType` (mini-program keyboard confirm label, e.g. `'search'`); Web ignores it. Enter fires the `search` event.
+- **Inline `var()` in styles**: if a platform fails to parse inline `var()`, the same property has a default fallback in the wxss class; prefer overriding tokens in `app.wxss` for custom themes.
+- **Overlay positioning**: `Toast` / `Modal` / `ActionSheet` / `Popup` use `position: fixed` rendered inside the component, with a unified `--tu-popup-z-index` layer (default 1000) so they never fight page content.
 
-## 主题定制
+## Theming
 
-设计令牌定义在 `lib/theme.ts`：
+Design tokens are defined in `lib/theme.ts`:
 
-| 变量 | 默认值 | 用途 |
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `--tu-primary` | `#1677ff` | 主色 |
-| `--tu-success` | `#00b578` | 成功色 |
-| `--tu-warning` | `#ff8f1f` | 警告色 |
-| `--tu-danger` | `#ff3141` | 危险色 |
-| `--tu-info` | `#909399` | 信息色 |
-| `--tu-text` | `#323233` | 主文字色 |
-| `--tu-border` | `#ebedf0` | 边框色 |
-| `--tu-track` | `#ebedf0` | 轨道色 |
-| `--tu-white` | `#ffffff` | 白色 |
-| `--tu-radius-sm/md/lg` | `4/8/12px` | 圆角 |
-| `--tu-duration-fast/normal/slow` | `0.15/0.3/0.5s` | 动画时长 |
-| `--tu-zindex-popup` | `1000` | 弹层层级 |
+| `--tu-primary` | `#1677ff` | Primary color |
+| `--tu-success` | `#00b578` | Success color |
+| `--tu-warning` | `#ff8f1f` | Warning color |
+| `--tu-danger` | `#ff3141` | Danger color |
+| `--tu-info` | `#909399` | Info color |
+| `--tu-text` | `#323233` | Primary text color |
+| `--tu-border` | `#ebedf0` | Border color |
+| `--tu-track` | `#ebedf0` | Track color |
+| `--tu-white` | `#ffffff` | White |
+| `--tu-radius-sm/md/lg` | `4/8/12px` | Corner radius |
+| `--tu-duration-fast/normal/slow` | `0.15/0.3/0.5s` | Animation duration |
+| `--tu-zindex-popup` | `1000` | Overlay z-index |
 
-- **Web**：调用 `injectTuTheme()`（可在入口执行一次），会向 `<head>` 注入 `style[data-tu-theme]` 默认令牌；传入覆盖对象可自定义：
+- **Web**: call `injectTuTheme()` (once, e.g. at entry) to inject a `style[data-tu-theme]` with default tokens into `<head>`; pass an overrides object to customize:
 
   ```ts
   import { injectTuTheme } from 'transone-ui';
   injectTuTheme({ '--tu-primary': '#ff6600' });
   ```
 
-- **小程序**：在 `app.wxss` 的 `page` 选择器中覆盖：
+- **Mini-program**: override on the `page` selector in `app.wxss`:
 
   ```css
   page {
@@ -196,9 +197,9 @@ class MyPage extends Component {
   }
   ```
 
-## 包 `source` 字段约定（CLI 编译依赖）
+## Package `"source"` field convention (required by the CLI compiler)
 
-`transone-cli` 编译小程序时，会从 `node_modules/<包>/package.json` 读取 `"source"` 字段定位该包的 TypeScript 入口，再沿 `export` / re-export 链解析组件类的实际文件。因此发布组件库时必须声明：
+When compiling mini-program output, `transone-cli` reads the `"source"` field from `node_modules/<package>/package.json` to locate the package's TypeScript entry, then follows the `export` / re-export chain to resolve the actual component class files. Component libraries must therefore declare:
 
 ```json
 {
@@ -208,22 +209,22 @@ class MyPage extends Component {
 }
 ```
 
-> 注意：只有 `source` 指向的入口及其 re-export 链中的类会被静态编译分析；组件类的 `render()` / `initState()` / `initStyles()` 需保持静态可分析（字面量、三元、`&&`、`each` 等受支持语法），方法体独立翻译、不能闭包捕获。
+> Only the entry the `source` field points to (and its re-export chain) is statically analyzed by the compiler. A component's `render()` / `initState()` / `initStyles()` must stay statically analyzable (literals, ternaries, `&&`, `each` and other supported syntax); method bodies are translated independently and cannot capture closures.
 
-## 开发
+## Development
 
 ```bash
-# 构建 dist（类型声明 + Bun.build）
+# Build dist (type declarations + Bun.build)
 bun run --cwd packages/transone-ui build
 
-# 组件运行时测试（Web DOM 环境）
+# Component runtime tests (Web DOM environment)
 bun test packages/transone-ui/tests/components.test.ts
 
-# 演示页整页集成测试（覆盖受控数据流）
+# Full-page demo integration tests (controlled data flow)
 bun test packages/transone-ui/tests/demo-integration.test.ts
 ```
 
-演示项目位于 `playground/ui-demo`，覆盖全部组件与受控交互，可分别构建 Web / 微信 / 阿里 / 字节产物：
+The demo project lives in `playground/ui-demo` and covers every component with controlled interactions. It can be built to Web / WeChat / Alipay / ByteDance output:
 
 ```bash
 bun run --cwd playground/ui-demo build:web        # dist/web
@@ -231,3 +232,7 @@ bun run --cwd playground/ui-demo build:weixin     # dist/build/mp-weixin
 bun run --cwd playground/ui-demo build:alipay     # dist/build/mp-alipay
 bun run --cwd playground/ui-demo build:bytedance  # dist/build/mp-bytedance
 ```
+
+## License
+
+MIT

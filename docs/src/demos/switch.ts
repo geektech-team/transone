@@ -17,7 +17,7 @@ export class DemoSwitch extends DemoHost<DemoSwitchState> {
       component: TuSwitch,
       props: { checked: this.state.checked },
       emitters: {
-        change: (checked: boolean) => this.setState({ checked }),
+        change: (...args: unknown[]) => this.setState({ checked: args[0] as boolean }),
       },
     }) as unknown as VNode;
   }
