@@ -12,7 +12,7 @@ import { ChartBase } from '../core/chart';
 import type { CategoryScale } from '../core/scale';
 import type { LayoutResult } from '../core/layout';
 import type { LegendItem } from '../core/legend';
-import type { BarChartOption, BarSeries } from '../types';
+import type { BarChartOption, BarSeries, TooltipParams } from '../types';
 
 /** 柱体在类目带内的水平偏移与宽度（纵向）或垂直偏移与高度（横向）。 */
 interface Slot {
@@ -95,6 +95,7 @@ export class BarChart extends ChartBase<BarChartOption> {
 
     const stackGroups = groupStacks(option.series);
     const categoryCount = option.xAxis.labels.length;
+    const hoverIndex = this.getHoverCategoryIndex();
 
     for (let i = 0; i < categoryCount; i += 1) {
       // 每个类目带内：无堆叠时按系列分组并排；有堆叠时按 stack 组并排
@@ -104,6 +105,7 @@ export class BarChart extends ChartBase<BarChartOption> {
         .map((s) => s.barWidth)
         .find((w) => w !== undefined && w > 0);
       const slot = this.computeSlot(category, seriesCount, explicitWidth);
+      const isHovered = hoverIndex === i;
 
       groups.forEach((group, groupIndex) => {
         const slotOffset = slot.offset + groupIndex * slot.size;
@@ -111,10 +113,11 @@ export class BarChart extends ChartBase<BarChartOption> {
 
         group.forEach((series) => {
           const raw = series.data[i] ?? 0;
-          const color = this.seriesColor(
+          const baseColor = this.seriesColor(
             option.series.indexOf(series),
             series.color
           );
+          const color = isHovered ? lightenColor(baseColor, 0.25) : baseColor;
 
           if (horizontal) {
             const x0 = value.scale(0);
@@ -152,6 +155,46 @@ export class BarChart extends ChartBase<BarChartOption> {
         });
       });
     }
+  }
+
+  /** 命中检测：点落在某类目的柱体带内即显示该类目所有系列值。 */
+  protected hitTestSeries(x: number, y: number): TooltipParams | null {
+    const scales = this.cartesian;
+    if (!scales) {
+      return null;
+    }
+    const horizontal = this.option.horizontal ?? false;
+    const labels = this.getCategoryLabels();
+
+    // 命中整个类目带（含柱间间隙）：鼠标在类目带内即命中，避免间隙处 tooltip 消失
+    for (let i = 0; i < labels.length; i += 1) {
+      const start = scales.category.bandStart(i);
+      const band = scales.category.bandWidth;
+      const hit = horizontal
+        ? y >= start && y <= start + band
+        : x >= start && x <= start + band;
+      if (!hit) {
+        continue;
+      }
+      // 该类目下所有系列（堆叠时为各段值）
+      const items = this.option.series.map((s, si) => ({
+        name: s.name ?? `系列${si + 1}`,
+        value: s.data[i] ?? 0,
+        color: this.seriesColor(si, s.color),
+      }));
+      return { x, y, name: labels[i], items };
+    }
+    return null;
+  }
+
+  /** 从 hover 状态解析命中的类目索引，未命中返回 -1。 */
+  private getHoverCategoryIndex(): number {
+    const hover = this.hover;
+    if (!hover) {
+      return -1;
+    }
+    const labels = this.getCategoryLabels();
+    return labels.indexOf(hover.name);
   }
 
   private computeSlot(
@@ -273,4 +316,42 @@ function roundRectPath(
     ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+/** 将颜色向白色方向混合 amount（0~1），支持 #rrggbb 与 rgba()。 */
+function lightenColor(color: string, amount: number): string {
+  const a = Math.max(0, Math.min(1, amount));
+
+  // #rrggbb / #rgb
+  const hex = color.match(/^#([0-9a-f]{3,8})$/i);
+  if (hex) {
+    let r: number;
+    let g: number;
+    let b: number;
+    const h = hex[1];
+    if (h.length === 3) {
+      r = parseInt(h[0] + h[0], 16);
+      g = parseInt(h[1] + h[1], 16);
+      b = parseInt(h[2] + h[2], 16);
+    } else {
+      r = parseInt(h.slice(0, 2), 16);
+      g = parseInt(h.slice(2, 4), 16);
+      b = parseInt(h.slice(4, 6), 16);
+    }
+    r = Math.round(r + (255 - r) * a);
+    g = Math.round(g + (255 - g) * a);
+    b = Math.round(b + (255 - b) * a);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  // rgba(r, g, b, a?) / rgb(r, g, b)
+  const rgba = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (rgba) {
+    const r = Math.round(parseInt(rgba[1]) + (255 - parseInt(rgba[1])) * a);
+    const g = Math.round(parseInt(rgba[2]) + (255 - parseInt(rgba[2])) * a);
+    const b = Math.round(parseInt(rgba[3]) + (255 - parseInt(rgba[3])) * a);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  return color;
 }

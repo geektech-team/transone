@@ -62,6 +62,8 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   private resizeDebounced: Debounced<() => void> | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private mpResizeHandler: (() => void) | null = null;
+  /** Web 端 hover 事件句柄（mousemove / mouseleave），卸载时移除。 */
+  private hoverHandlers: Array<[string, (e: Event) => void]> = [];
 
   protected initState(): TcChartState {
     return { canvasId: CANVAS_ID };
@@ -89,6 +91,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   protected onMounted(): void {
     this.attachChart();
     this.setupAutoResize();
+    this.setupHoverEvents();
   }
 
   protected onUpdated(): void {
@@ -101,6 +104,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
 
   protected onUnmounted(): void {
     this.teardownAutoResize();
+    this.teardownHoverEvents();
     this.destroyed = true;
     this.chart?.destroy();
     this.chart = null;
@@ -129,9 +133,67 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       });
   }
 
-  /** 组件根元素（canvas）。Web 端用于解析渲染上下文；小程序端经 SelectorQuery .in(实例) 查询，不依赖此方法。 */
+  /**
+   * Web 端返回根 canvas；小程序端此方法不会被调用（走 SelectorQuery）。
+   * 注意：方法体不能写 super.X() —— transone-cli 编译小程序时会把组件方法拍平为
+   * Component options 的普通函数属性，super 在普通函数里非法（JSCore 直接报错）。
+   * 基类 el 为 protected，此处直接取用；返回类型收窄在使用点做断言。
+   */
   public getElement(): HTMLCanvasElement | null {
-    return super.getElement() as HTMLCanvasElement | null;
+    return this.el as HTMLCanvasElement | null;
+  }
+
+  /* —— 悬浮提示（tooltip）：Web mousemove / mouseleave —— */
+
+  /** Web 端绑定 hover 事件：鼠标移动命中数据点即显示 tooltip，离开清除。 */
+  private setupHoverEvents(): void {
+    if (this.destroyed || this.hoverHandlers.length > 0) {
+      return;
+    }
+    // 小程序端暂无鼠标事件，一期仅 Web；后续可在 touchstart/touchmove 接入同一 setHover API
+    if (detectMiniProgramGlobal()) {
+      return;
+    }
+    const element = this.getElement() as HTMLCanvasElement | null;
+    if (!element || typeof element.addEventListener !== 'function') {
+      return;
+    }
+
+    const onMove = (event: Event): void => {
+      const chart = this.chart;
+      if (!chart) {
+        return;
+      }
+      const mouse = event as MouseEvent;
+      const rect = element.getBoundingClientRect();
+      const relX = mouse.clientX - rect.left;
+      const relY = mouse.clientY - rect.top;
+      // 同步图表逻辑尺寸，避免 resize 防抖窗口内坐标系偏移导致命中错位
+      const w = rect.width;
+      const h = rect.height;
+      if (w > 0 && h > 0) {
+        chart.resize(w, h);
+      }
+      chart.setHover(relX, relY);
+    };
+    const onLeave = (): void => {
+      this.chart?.clearHover();
+    };
+
+    element.addEventListener('mousemove', onMove);
+    element.addEventListener('mouseleave', onLeave);
+    this.hoverHandlers = [
+      ['mousemove', onMove],
+      ['mouseleave', onLeave],
+    ];
+  }
+
+  private teardownHoverEvents(): void {
+    const element = this.getElement() as HTMLCanvasElement | null;
+    for (const [type, handler] of this.hoverHandlers) {
+      element?.removeEventListener(type, handler);
+    }
+    this.hoverHandlers = [];
   }
 
   /* —— 自动重绘：容器 / 窗口尺寸变化时防抖重绘 —— */
@@ -155,7 +217,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
 
     // Web：ResizeObserver 观察 canvas 自身（CSS 宽高 100%，容器变化即触发）。
     // SSR / 构建期无真实元素与 ResizeObserver，跳过。
-    const element = this.getElement();
+    const element = this.getElement() as HTMLCanvasElement | null;
     if (
       element &&
       typeof element.getContext === 'function' &&

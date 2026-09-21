@@ -29,14 +29,14 @@ export interface ResolvedCanvas {
 
 /** 通用探测设备像素比（web 与小程序可用 globalThis 访问）。 */
 export function detectPixelRatio(): number {
-  const host = getHost();
+  const host = getPixelRatioHost();
   if (typeof host.devicePixelRatio === 'number' && host.devicePixelRatio > 0) {
     return host.devicePixelRatio;
   }
   return 1;
 }
 
-function getHost(): Record<string, unknown> {
+function getPixelRatioHost(): Record<string, unknown> {
   if (typeof globalThis !== 'undefined') {
     return globalThis as unknown as Record<string, unknown>;
   }

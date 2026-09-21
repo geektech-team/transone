@@ -458,6 +458,27 @@ export const chartChartsPage: DocPage = {
       inlineCode('lib/types.ts'),
       '（含中文注释）与 dist 类型定义为准。',
     ),
+    heading(2, '悬浮提示（tooltip）'),
+    paragraph(
+      '四种图表默认开启 tooltip：Web 端鼠标移到数据点 / 柱体 / 扇区上，即在数据旁显示该类目（或扇区）下的数值，靠近右侧与底部边缘时自动翻转。传',
+      inlineCode('tooltip: { show: false }'),
+      '关闭；通过',
+      inlineCode('formatter'),
+      '自定义展示内容：',
+    ),
+    codeBlock(
+      'typescript',
+      `tooltip: {
+  formatter: (params) => [
+    params.name,
+    ...params.items.map((item) => \`\${item.name}: \${item.value}\`),
+  ],
+}`
+    ),
+    apiTable('TooltipOption', [
+      { name: 'show', type: 'boolean', description: '是否显示 tooltip，默认 true。' },
+      { name: 'formatter', type: '(params: TooltipParams) => string | string[]', description: '自定义内容。params 含触发位置 x/y、类目（扇区）名 name、数据项 items[]（每项 name/value/color）。' },
+    ]),
   ],
 };
 

@@ -81,6 +81,36 @@ export interface CategoryAxisOption {
   showGrid?: boolean;
 }
 
+/** —— Tooltip（悬浮提示）—— */
+
+/** tooltip 中一条数据（一个系列 / 一个扇区）。 */
+export interface TooltipDatum {
+  /** 系列名 / 扇区名。 */
+  name: string;
+  /** 显示值（已格式化）。 */
+  value: number | string;
+  /** 色块颜色，用于 tooltip 前的小圆点。 */
+  color?: string;
+}
+
+/** tooltip 触发时命中的一组数据。 */
+export interface TooltipParams {
+  /** 触发位置（逻辑像素）。 */
+  x: number;
+  y: number;
+  /** 类目名 / 扇区名。 */
+  name: string;
+  /** 该类目 / 扇区下的所有数据项。 */
+  items: readonly TooltipDatum[];
+}
+
+export interface TooltipOption {
+  /** 是否显示 tooltip，默认 true。 */
+  show?: boolean;
+  /** 自定义展示内容；返回文本行数组。缺省自动生成（首行标题 + 每行一个色块数据项）。 */
+  formatter?: (params: TooltipParams) => string | readonly string[];
+}
+
 /** —— 折线图 —— */
 
 export interface LineSeries {
@@ -105,6 +135,8 @@ export interface LineChartOption {
   series: readonly LineSeries[];
   /** 数值轴是否从 0 开始（数据全为正时强制含 0），默认 false（按数据范围紧凑显示）。 */
   startFromZero?: boolean;
+  /** 悬浮提示配置；默认开启，可 tooltip: { show: false } 关闭。 */
+  tooltip?: TooltipOption;
   /** 背景色（如 'rgba(22,119,255,0.06)'），默认无。 */
   backgroundColor?: string;
 }
@@ -132,6 +164,8 @@ export interface BarChartOption {
   series: readonly BarSeries[];
   /** 横向柱状图（类目轴转纵向、数值轴转横向），默认 false。 */
   horizontal?: boolean;
+  /** 悬浮提示配置；默认开启，可 tooltip: { show: false } 关闭。 */
+  tooltip?: TooltipOption;
   backgroundColor?: string;
 }
 
@@ -166,6 +200,8 @@ export interface PieChartOption {
   labelColor?: string;
   /** 起始角（弧度），默认 -Math.PI / 2（12 点方向），顺时针。 */
   startAngle?: number;
+  /** 悬浮提示配置；默认开启，可 tooltip: { show: false } 关闭。 */
+  tooltip?: TooltipOption;
   backgroundColor?: string;
 }
 
@@ -202,6 +238,8 @@ export interface RadarChartOption {
   radius?: number;
   /** 起始角（弧度），默认 -Math.PI / 2（12 点方向），顺时针。 */
   startAngle?: number;
+  /** 悬浮提示配置；默认开启，可 tooltip: { show: false } 关闭。 */
+  tooltip?: TooltipOption;
   backgroundColor?: string;
 }
 

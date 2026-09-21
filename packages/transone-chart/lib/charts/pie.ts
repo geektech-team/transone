@@ -8,7 +8,7 @@ import { ChartBase } from '../core/chart';
 import type { LayoutResult } from '../core/layout';
 import type { LegendItem } from '../core/legend';
 import { applyFont } from '../core/text';
-import type { PieChartOption } from '../types';
+import type { PieChartOption, TooltipParams } from '../types';
 
 const TWO_PI = Math.PI * 2;
 
@@ -22,6 +22,61 @@ export class PieChart extends ChartBase<PieChartOption> {
       name: d.name,
       color: d.color ?? this.seriesColor(i),
     }));
+  }
+
+  /** 命中检测：点落在某扇区（环形环带内）即显示该扇区名与数值占比。 */
+  protected hitTestSeries(x: number, y: number): TooltipParams | null {
+    const plot = this.plot;
+    if (!plot) {
+      return null;
+    }
+    const centerX = plot.x + plot.width / 2;
+    const centerY = plot.y + plot.height / 2;
+    const maxRadius = Math.min(plot.width, plot.height) / 2;
+    const outerRadius = resolveRadius(this.option.radius ?? '60%', maxRadius);
+    const innerRadius = resolveRadius(this.option.innerRadius ?? 0, maxRadius);
+    const startAngle = this.option.startAngle ?? -Math.PI / 2;
+
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < innerRadius || dist > outerRadius) {
+      return null;
+    }
+
+    const data = this.option.data.filter((d) => d.value > 0);
+    const total = data.reduce((sum, d) => sum + d.value, 0);
+    if (total <= 0) {
+      return null;
+    }
+
+    // 命中角（canvas 系 y 向下，与绘制时角度递增方向一致）
+    let a = Math.atan2(dy, dx);
+    while (a < startAngle) {
+      a += TWO_PI;
+    }
+    let cur = startAngle;
+    for (let i = 0; i < data.length; i += 1) {
+      const d = data[i]!;
+      const sweep = (d.value / total) * TWO_PI;
+      if (a >= cur && a <= cur + sweep) {
+        const percent = Math.round((d.value / total) * 100);
+        return {
+          x,
+          y,
+          name: d.name,
+          items: [
+            {
+              name: d.name,
+              value: `${percent}%`,
+              color: d.color ?? this.seriesColor(i),
+            },
+          ],
+        };
+      }
+      cur += sweep;
+    }
+    return null;
   }
 
   protected drawSeries(

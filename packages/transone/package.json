@@ -1,6 +1,6 @@
 {
   "name": "transone",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TransOne 是跨端前端框架：一份 TypeScript 源码，编译期静态转换为 Web 与多端小程序原生产物，产物不携带框架运行时",
   "type": "module",
   "main": "./dist/index.js",

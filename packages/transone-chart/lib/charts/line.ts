@@ -7,7 +7,7 @@ import type { ICanvas2D } from '../core/canvas';
 import { ChartBase } from '../core/chart';
 import type { LayoutResult } from '../core/layout';
 import type { LegendItem } from '../core/legend';
-import type { LineChartOption } from '../types';
+import type { LineChartOption, TooltipParams } from '../types';
 
 interface Point {
   x: number;
@@ -68,6 +68,7 @@ export class LineChart extends ChartBase<LineChartOption> {
     }
     const { plot } = layout;
     const { value, category } = scales;
+    const hoverIndex = this.getHoverCategoryIndex();
 
     const pointsPerSeries: Point[][] = option.series.map((series) =>
       series.data.map((d, i) => ({
@@ -75,6 +76,20 @@ export class LineChart extends ChartBase<LineChartOption> {
         y: value.scale(d),
       }))
     );
+
+    // 悬浮参考线：在命中类目中心画一条纵向虚线
+    if (hoverIndex >= 0) {
+      const hx = category.center(hoverIndex);
+      ctx.save();
+      ctx.strokeStyle = '#c8c9cc';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hx, plot.y);
+      ctx.lineTo(hx, plot.y + plot.height);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     option.series.forEach((series, index) => {
       const points = pointsPerSeries[index];
@@ -111,16 +126,60 @@ export class LineChart extends ChartBase<LineChartOption> {
 
       // 数据点标记
       if (series.showSymbol !== false) {
+        const baseR = Math.max(2.5, lineWidth + 0.5);
         ctx.save();
         ctx.fillStyle = color;
-        for (const p of points) {
+        for (let i = 0; i < points.length; i += 1) {
+          const p = points[i];
+          const r = i === hoverIndex ? baseR * 1.6 : baseR;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, Math.max(2.5, lineWidth + 0.5), 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.restore();
       }
     });
+  }
+
+  /** 命中检测：x 落在某类目带内即显示该类目所有系列值（y 在绘图区内即可）。 */
+  protected hitTestSeries(x: number, y: number): TooltipParams | null {
+    const scales = this.cartesian;
+    const plot = this.plot;
+    if (!scales || !plot) {
+      return null;
+    }
+    if (y < plot.y || y > plot.y + plot.height) {
+      return null;
+    }
+    const labels = this.option.xAxis.labels;
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < labels.length; i += 1) {
+      const d = Math.abs(scales.category.center(i) - x);
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    if (best < 0 || bestDist > scales.category.bandWidth / 2) {
+      return null;
+    }
+    const items = this.option.series.map((s, i) => ({
+      name: s.name ?? `系列${i + 1}`,
+      value: s.data[best] ?? 0,
+      color: this.seriesColor(i, s.color),
+    }));
+    return { x, y, name: labels[best], items };
+  }
+
+  /** 从 hover 状态解析命中的类目索引，未命中返回 -1。 */
+  private getHoverCategoryIndex(): number {
+    const hover = this.hover;
+    if (!hover) {
+      return -1;
+    }
+    const labels = this.option.xAxis.labels;
+    return labels.indexOf(hover.name);
   }
 
   /** 折线路径：直线或 Catmull-Rom 平滑插值（三次贝塞尔）。 */

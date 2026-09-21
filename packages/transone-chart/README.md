@@ -159,7 +159,7 @@ save → scale(dpr) → clear → 背景 → 布局(title/legend/轴区逐层扣
 ## 开发
 
 ```bash
-bun test                  # 53 个单测（mock canvas 断言绘制命令 + 防抖 / resize）
+bun test                  # 62 个单测（mock canvas 断言绘制命令 + 防抖 / resize / tooltip 命中）
 bun run build             # tsc 声明 + Bun.build（minify, ESM）
 bun run --cwd ../../playground/chart-demo build:web   # 演示项目构建
 ```
@@ -177,7 +177,8 @@ packages/transone-chart/
 ## 路线图
 
 - [x] 一期：折线 / 柱状 / 饼 / 雷达 + Web / 小程序 + 原生契约
-- [ ] 交互：tooltip / 高亮 / 点击事件（event 层）
+- [x] tooltip：Web 悬浮命中数据点 / 柱体 / 扇区显示数值，formatter 自定义内容
+- [ ] 交互增强：hover 高亮 / 点击事件（event 层）
 - [ ] 更多图表：散点 / 面积 / 漏斗 / 仪表盘
 - [ ] 原生 App 适配器实现（iOS / Android / 鸿蒙桥层）
 - [ ] 主题系统 / 动画过渡

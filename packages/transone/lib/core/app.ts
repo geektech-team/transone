@@ -79,7 +79,7 @@ export class OneApp<
   constructor(private options: AppOptions<TState, TConfig, TRootProps> = {}) {
     this.appContext = {
       app: this as unknown as OneApp,
-      version: '0.3.0',
+      version: '0.4.0',
       config: options.config || ({} as TConfig),
     };
   }

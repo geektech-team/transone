@@ -45,7 +45,7 @@ export abstract class Component<
   TState extends ComponentState = ComponentState,
 > implements ComponentInstance {
   private vnode: VNode | null = null;
-  private el: Node | null = null;
+  protected el: Node | null = null;
   private readonly renderer = new RendererContext();
   private readonly templateEngine: TemplateEngine;
   private readonly childComponents = new Set<ComponentInstance>();

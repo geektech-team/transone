@@ -8,7 +8,7 @@ import { ChartBase } from '../core/chart';
 import type { LayoutResult } from '../core/layout';
 import type { LegendItem } from '../core/legend';
 import { applyFont } from '../core/text';
-import type { RadarChartOption } from '../types';
+import type { RadarChartOption, TooltipParams } from '../types';
 
 interface PolarPoint {
   x: number;
@@ -45,7 +45,7 @@ export class RadarChart extends ChartBase<RadarChartOption> {
     }
 
     const startAngle = option.startAngle ?? -Math.PI / 2;
-    const step = TWO_PI / count;
+    const step = RADAR_TWO_PI / count;
     const splitCount = Math.max(1, option.splitCount ?? 5);
     const gridColor = option.gridColor ?? '#ebedf0';
     const gridLineWidth = option.gridLineWidth ?? 1;
@@ -141,6 +141,57 @@ export class RadarChart extends ChartBase<RadarChartOption> {
     });
   }
 
+  /** 命中检测：靠近任一数据顶点（阈值 24px）即显示该指标下所有系列值。 */
+  protected hitTestSeries(x: number, y: number): TooltipParams | null {
+    const plot = this.plot;
+    if (!plot) {
+      return null;
+    }
+    const centerX = plot.x + plot.width / 2;
+    const centerY = plot.y + plot.height / 2;
+    const radius =
+      this.option.radius ?? (Math.min(plot.width, plot.height) / 2) * 0.6;
+    const count = this.option.indicators.length;
+    if (count === 0) {
+      return null;
+    }
+    const startAngle = this.option.startAngle ?? -Math.PI / 2;
+    const step = RADAR_TWO_PI / count;
+
+    let best = -1;
+    let bestDist = 24; // 命中阈值（px）
+    for (let i = 0; i < count; i += 1) {
+      const max =
+        this.option.indicators[i].max ?? this.indicatorMax(this.option, i);
+      const angle = startAngle + i * step;
+      for (let si = 0; si < this.option.series.length; si += 1) {
+        const value = this.option.series[si].data[i] ?? 0;
+        const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+        const px = centerX + Math.cos(angle) * radius * ratio;
+        const py = centerY + Math.sin(angle) * radius * ratio;
+        const d = Math.hypot(x - px, y - py);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+    }
+    if (best < 0) {
+      return null;
+    }
+    const items = this.option.series.map((s, si) => ({
+      name: s.name ?? `系列${si + 1}`,
+      value: s.data[best] ?? 0,
+      color: this.seriesColor(si, s.color),
+    }));
+    return {
+      x,
+      y,
+      name: this.option.indicators[best]!.name,
+      items,
+    };
+  }
+
   private indicatorMax(option: RadarChartOption, index: number): number {
     let max = 0;
     for (const series of option.series) {
@@ -163,4 +214,4 @@ export class RadarChart extends ChartBase<RadarChartOption> {
   }
 }
 
-const TWO_PI = Math.PI * 2;
+const RADAR_TWO_PI = Math.PI * 2;
