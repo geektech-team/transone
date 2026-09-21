@@ -72,9 +72,13 @@ export abstract class ChartBase<T extends ChartOption> {
     return this;
   }
 
-  public resize(width: number, height: number): this {
+  public resize(width: number, height: number, dpr?: number): this {
     this.width = Math.max(0, width);
     this.height = Math.max(0, height);
+    // dpr 变化（如窗口跨屏移动）时同步更新，绘制管线按新 dpr 缩放
+    if (dpr !== undefined && Number.isFinite(dpr) && dpr > 0) {
+      this.dpr = dpr;
+    }
     return this;
   }
 

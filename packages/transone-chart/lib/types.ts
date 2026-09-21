@@ -154,6 +154,14 @@ export interface PieChartOption {
   innerRadius?: number | string;
   /** 是否显示扇区标签（名称 + 百分比），默认 true。 */
   showLabel?: boolean;
+  /** 标签位置：'inside' 画在扇区内（默认，白字）；'outside' 画在扇区外并带引线（适合小扇区 / 长名称）。 */
+  labelPosition?: 'inside' | 'outside';
+  /** 外部标签引线沿平分线的长度（px），仅 labelPosition: 'outside' 生效，默认 14。 */
+  labelLineLength?: number;
+  /** 外部标签与引线端点的水平间距（px），仅 labelPosition: 'outside' 生效，默认 6。 */
+  labelGap?: number;
+  /** 外部标签引线颜色，默认 '#c0c4cc'。 */
+  labelLineColor?: string;
   labelFontSize?: number;
   labelColor?: string;
   /** 起始角（弧度），默认 -Math.PI / 2（12 点方向），顺时针。 */

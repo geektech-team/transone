@@ -30,11 +30,18 @@ describe('BarChart', () => {
     expect(rects.length).toBe(4);
 
     // 每类目 2 组：innerWidth = 170×0.65 = 110.5，size = 110.5/2×0.8 = 44.2
-    // 组间 gap = (110.5 - 88.4)/2 = 11.05
-    // 类目 A：组1 x = 44 + 11.05 = 55.05，组2 x = 99.25
-    // 类目 B：组1 x = 44 + 170 + 11.05 = 225.05，组2 x = 269.25
+    // band 两侧留白 = (170 - 110.5)/2 = 29.75；组间 gap = (110.5 - 88.4)/2 = 11.05
+    // 类目 A：组1 x = 44 + 29.75 + 11.05 = 84.8，组2 x = 129.0
+    // 类目 B：组1 x = 44 + 170 + 40.8 = 254.8，组2 x = 299.0
     const xs = rects.map((r) => (r[0] as number).toFixed(2));
-    expect(xs).toEqual(['55.05', '99.25', '225.05', '269.25']);
+    expect(xs).toEqual(['84.80', '129.00', '254.80', '299.00']);
+
+    // 整组柱中心落在类目中心（A 类：44 + 170/2 = 129；B 类：299），与轴标签对齐
+    const centers = rects.map(
+      (r) => (r[0] as number) + (r[2] as number) / 2
+    );
+    expect((centers[0]! + centers[1]!) / 2).toBeCloseTo(129, 0);
+    expect((centers[2]! + centers[3]!) / 2).toBeCloseTo(299, 0);
   });
 
   test('柱体高度从零线起算', () => {

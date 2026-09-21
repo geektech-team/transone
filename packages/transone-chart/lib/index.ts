@@ -30,6 +30,10 @@ export type { LinearScaleOptions, ScaleResult } from './core/scale';
 export { computeLayout } from './core/layout';
 export type { Box, LayoutInput, LayoutResult, Padding } from './core/layout';
 
+// 工具：防抖（自动重绘等高频触发场景）
+export { debounce } from './core/debounce';
+export type { Debounced } from './core/debounce';
+
 // 图表基类
 export { ChartBase } from './core/chart';
 export type { CartesianScales } from './core/chart';

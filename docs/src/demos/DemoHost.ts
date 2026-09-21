@@ -54,6 +54,7 @@ export abstract class DemoHost<
         lineHeight: '1.6',
         margin: '0',
         padding: '12px 20px',
+        textAlign: 'center',
       },
     });
   }

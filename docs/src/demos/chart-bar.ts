@@ -48,16 +48,28 @@ export class DemoChartBar extends DemoHost<{
   protected renderDemo(): VNode {
     return {
       tag: 'div',
-      props: { className: 'tc-demo-box' },
+      props: { className: 'tc-demo-grid' },
       children: [
-        createComponent({
-          component: TcChart,
-          props: { option: this.state.stacked },
-        }) as unknown as VNode,
-        createComponent({
-          component: TcChart,
-          props: { option: this.state.horizontal },
-        }) as unknown as VNode,
+        {
+          tag: 'div',
+          props: { className: 'tc-demo-box' },
+          children: [
+            createComponent({
+              component: TcChart,
+              props: { option: this.state.stacked },
+            }) as unknown as VNode,
+          ],
+        },
+        {
+          tag: 'div',
+          props: { className: 'tc-demo-box' },
+          children: [
+            createComponent({
+              component: TcChart,
+              props: { option: this.state.horizontal },
+            }) as unknown as VNode,
+          ],
+        },
       ],
     };
   }

@@ -7,7 +7,10 @@
  * - 未来原生：通过 resolve 注入自定义解析器
  *
  * 组件本身是薄壳：状态由父级以 option 传入（完全受控），
- * 数据变化时自动 setOption + render。
+ * 数据变化时自动 setOption + render；
+ * 容器 / 窗口尺寸变化时防抖（150ms）自动重绘：
+ * - Web：ResizeObserver 观察 canvas，重测 clientWidth/Height 后增量 resize + render
+ * - 小程序：平台窗口尺寸回调触发后重建图表（SelectorQuery 取最新节点尺寸）
  */
 
 import {
@@ -17,12 +20,15 @@ import {
 } from 'transone';
 import type { ChartRenderContext, ChartOption } from './types';
 import type { ChartBase } from './core/chart';
+import { debounce, type Debounced } from './core/debounce';
 import { createChart } from './factory';
 import {
   detectMiniProgramGlobal,
   getMiniProgramCanvasNode,
+  getMiniProgramGlobal,
   resolveMiniProgramCanvas,
 } from './adapters/miniprogram';
+import { detectPixelRatio } from './adapters/types';
 import { resolveWebCanvas } from './adapters/web';
 
 export interface TcChartProps {
@@ -42,9 +48,20 @@ interface TcChartState {
 /** canvas 元素 id：Web 端仅作 DOM 属性；小程序端配合 SelectorQuery .in(实例) 隔离查询，多实例共存不冲突。 */
 const CANVAS_ID = 'tc-chart-canvas';
 
+/** 尺寸变化自动重绘的防抖窗口（毫秒）。连续 resize 事件只在此窗口后重绘一次。 */
+const RESIZE_DEBOUNCE_MS = 150;
+
+interface MpWindowResizeApi {
+  onWindowResize?: (callback: () => void) => unknown;
+  offWindowResize?: (callback: () => void) => unknown;
+}
+
 export class TcChart extends Component<TcChartProps, TcChartState> {
   private chart: ChartBase<ChartOption> | null = null;
   private destroyed = false;
+  private resizeDebounced: Debounced<() => void> | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private mpResizeHandler: (() => void) | null = null;
 
   protected initState(): TcChartState {
     return { canvasId: CANVAS_ID };
@@ -71,6 +88,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
 
   protected onMounted(): void {
     this.attachChart();
+    this.setupAutoResize();
   }
 
   protected onUpdated(): void {
@@ -82,6 +100,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   }
 
   protected onUnmounted(): void {
+    this.teardownAutoResize();
     this.destroyed = true;
     this.chart?.destroy();
     this.chart = null;
@@ -113,6 +132,87 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   /** 组件根元素（canvas）。Web 端用于解析渲染上下文；小程序端经 SelectorQuery .in(实例) 查询，不依赖此方法。 */
   public getElement(): HTMLCanvasElement | null {
     return super.getElement() as HTMLCanvasElement | null;
+  }
+
+  /* —— 自动重绘：容器 / 窗口尺寸变化时防抖重绘 —— */
+
+  private setupAutoResize(): void {
+    if (this.destroyed || this.resizeDebounced) {
+      return;
+    }
+    this.resizeDebounced = debounce(() => this.handleResize(), RESIZE_DEBOUNCE_MS);
+
+    const platform = detectMiniProgramGlobal();
+    if (platform) {
+      // 小程序：各平台均有窗口尺寸回调（横竖屏切换 / 分屏等场景）
+      const mp = getMiniProgramGlobal(platform) as MpWindowResizeApi | null;
+      if (mp && typeof mp.onWindowResize === 'function') {
+        this.mpResizeHandler = () => this.resizeDebounced!.run();
+        mp.onWindowResize(this.mpResizeHandler);
+      }
+      return;
+    }
+
+    // Web：ResizeObserver 观察 canvas 自身（CSS 宽高 100%，容器变化即触发）。
+    // SSR / 构建期无真实元素与 ResizeObserver，跳过。
+    const element = this.getElement();
+    if (
+      element &&
+      typeof element.getContext === 'function' &&
+      typeof ResizeObserver === 'function'
+    ) {
+      this.resizeObserver = new ResizeObserver(() => this.resizeDebounced!.run());
+      this.resizeObserver.observe(element);
+    }
+  }
+
+  private teardownAutoResize(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.resizeDebounced?.cancel();
+    this.resizeDebounced = null;
+    if (this.mpResizeHandler) {
+      const platform = detectMiniProgramGlobal();
+      const mp = platform
+        ? (getMiniProgramGlobal(platform) as MpWindowResizeApi | null)
+        : null;
+      if (mp && typeof mp.offWindowResize === 'function') {
+        mp.offWindowResize(this.mpResizeHandler);
+      }
+      this.mpResizeHandler = null;
+    }
+  }
+
+  private handleResize(): void {
+    if (this.destroyed) {
+      return;
+    }
+    if (detectMiniProgramGlobal()) {
+      // 小程序：窗口尺寸变化后 SelectorQuery 取到的节点尺寸已更新，
+      // 重建图表即可拿到最新尺寸（上下文持有节点实测宽高与 pixelRatio）。
+      this.chart?.destroy();
+      this.chart = null;
+      this.attachChart();
+      return;
+    }
+    const element = this.getElement() as HTMLCanvasElement | null;
+    if (!element || typeof element.getContext !== 'function') {
+      return;
+    }
+    const width = element.clientWidth || 0;
+    const height = element.clientHeight || 0;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    if (!this.chart) {
+      this.attachChart();
+      return;
+    }
+    // 更新物理像素缓冲（逻辑尺寸 × DPR），并增量重绘（保留图表状态）
+    const dpr = detectPixelRatio();
+    element.width = Math.round(width * dpr);
+    element.height = Math.round(height * dpr);
+    this.chart.resize(width, height, dpr).render();
   }
 
   private resolveContext(): Promise<ChartRenderContext | null> {

@@ -87,6 +87,7 @@ const option = {
     { name: '搜索', value: 10 },
   ],
   innerRadius: '38%', // 内半径 > 0 即环形图
+  labelPosition: 'outside', // 引线把标签放到扇区外，小扇区文字不被遮挡
 };
 
 class MyPage extends Component {
@@ -180,8 +181,8 @@ export const chartLandingPage: DocPage = {
         href: '/transone-chart/architecture',
       },
       {
-        title: '图表 API',
-        description: '折线 / 柱状 / 饼图 / 雷达的完整配置字段参考。',
+        title: '图表总览',
+        description: '四种图表组件入口与通用创建方式。',
         href: '/transone-chart/charts',
       },
       {
@@ -248,8 +249,17 @@ class MyPage extends Component {
       ],
       '画布尺寸'
     ),
+    callout(
+      'tip',
+      [
+        '容器 / 窗口宽度变化时组件自动重绘（防抖 150ms）：Web 端 ResizeObserver 监听后增量',
+        inlineCode('resize + render'),
+        '，小程序端窗口尺寸回调触发后重建；图表始终铺满容器宽度，无需手动调用。',
+      ],
+      '自动重绘'
+    ),
     heading(2, '示例：折线图（上面配置的实际渲染）'),
-    demo('chart-line'),
+    demo('chart-line', LINE_SOURCE),
     heading(2, '方式二：引擎直用（无框架场景）'),
     paragraph('不依赖 transone 组件系统时，直接用工厂入口：'),
     codeBlock(
@@ -284,7 +294,7 @@ bun run build:bytedance   # 字节小程序`
     ),
     heading(2, '下一步'),
     ul([
-      [link('图表 API', '/transone-chart/charts'), '：四种图表的配置字段参考。'],
+      [link('图表总览', '/transone-chart/charts'), '：四种图表组件入口。'],
       [link('架构', '/transone-chart/architecture'), '：ICanvas2D 契约与原生 App 扩展指南。'],
       [link('跨端集成', '/transone-chart/cross-platform'), '：小程序端约束与各端支持状态。'],
     ]),
@@ -397,24 +407,77 @@ chart.render();`
   ],
 };
 
-// ---- 图表 API ----
+// ---- 图表总览 + 四个图表组件页 ----
 
 export const chartChartsPage: DocPage = {
   path: '/transone-chart/charts',
-  title: '图表 API',
-  description: '折线 / 柱状 / 饼图 / 雷达四种图表的配置字段参考。',
+  title: '图表总览',
+  description: '折线 / 柱状 / 饼图 / 雷达四种图表组件入口与通用创建方式。',
   section: 'chart',
   order: 3,
   body: [
-    heading(1, '图表 API'),
+    heading(1, '图表总览'),
     paragraph(
-      '所有配置均为 ECharts 心智（',
+      'transone-chart 一期内置四种图表组件，均为',
+      inlineCode('option.type'),
+      '驱动的统一配置心智（',
       inlineCode('title / legend / xAxis / yAxis / series'),
-      '），零依赖纯 Canvas 绘制。完整字段以包内',
+      '），零依赖纯 Canvas 绘制。点击进入各组件文档（配置字段 + 示例 + 源代码）：'
+    ),
+    linkGrid([
+      {
+        title: '折线图',
+        description: '多系列趋势、smooth 平滑曲线、area 面积填充、数据点标记。',
+        href: '/transone-chart/line',
+      },
+      {
+        title: '柱状图',
+        description: '分类堆叠、横向柱状、圆角柱体与自动柱宽。',
+        href: '/transone-chart/bar',
+      },
+      {
+        title: '饼图',
+        description: '环形图、百分比标签、top / right 等方位图例。',
+        href: '/transone-chart/pie',
+      },
+      {
+        title: '雷达图',
+        description: '多系列对比、指标 max 归一化、面积填充与网格分层。',
+        href: '/transone-chart/radar',
+      },
+    ]),
+    heading(2, '创建图表'),
+    paragraph(
+      '统一入口',
+      inlineCode('createChart(context, option)'),
+      '按',
+      inlineCode('option.type'),
+      '分发到对应图表策略；',
+      inlineCode('createWebChart / createMiniProgramChart'),
+      '是两端便捷入口。完整字段以包内',
       inlineCode('lib/types.ts'),
       '（含中文注释）与 dist 类型定义为准。',
     ),
-    heading(2, '折线图 LineChartOption'),
+  ],
+};
+
+export const chartLinePage: DocPage = {
+  path: '/transone-chart/line',
+  title: '折线图',
+  description: '折线图组件：多系列趋势、平滑曲线与面积填充。',
+  section: 'chart',
+  order: 4,
+  body: [
+    heading(1, '折线图'),
+    paragraph(
+      '多系列趋势对比：',
+      inlineCode('smooth'),
+      ' 平滑曲线（三次贝塞尔插值），',
+      inlineCode('area'),
+      ' 面积填充，',
+      inlineCode('showSymbol'),
+      ' 数据点标记。',
+    ),
     apiTable('LineChartOption', [
       { name: 'type', type: "'line'", description: '图表类型。' },
       { name: 'xAxis.labels', type: 'readonly string[]', description: '类目轴标签。' },
@@ -425,25 +488,85 @@ export const chartChartsPage: DocPage = {
       { name: 'startFromZero', type: 'boolean', description: '数据全为正时强制含 0，默认 false（紧凑显示）。' },
       { name: 'title / legend / yAxis', type: 'object', description: '标题、图例、数值轴配置。' },
     ]),
-    demo('chart-line'),
-    heading(2, '柱状图 BarChartOption'),
+    demo('chart-line', LINE_SOURCE),
+  ],
+};
+
+export const chartBarPage: DocPage = {
+  path: '/transone-chart/bar',
+  title: '柱状图',
+  description: '柱状图组件：分类堆叠、横向柱状与圆角柱体。',
+  section: 'chart',
+  order: 5,
+  body: [
+    heading(1, '柱状图'),
+    paragraph(
+      inlineCode('stack'),
+      ' 同名系列纵向堆叠，',
+      inlineCode('horizontal'),
+      ' 切换横向柱状图（类目轴转纵向），',
+      inlineCode('borderRadius'),
+      ' 柱体圆角。'
+    ),
     apiTable('BarChartOption', [
       { name: 'series[].stack', type: 'string', description: '堆叠组名；同名系列纵向堆叠。' },
       { name: 'series[].barWidth', type: 'number', description: '柱宽（px），缺省按类目带自动计算。' },
       { name: 'series[].borderRadius', type: 'number', description: '柱体圆角，默认 0。' },
       { name: 'horizontal', type: 'boolean', description: '横向柱状图（类目轴转纵向），默认 false。' },
     ]),
-    demo('chart-bar'),
-    heading(2, '饼图 PieChartOption'),
+    demo('chart-bar', BAR_SOURCE),
+  ],
+};
+
+export const chartPiePage: DocPage = {
+  path: '/transone-chart/pie',
+  title: '饼图',
+  description: '饼图 / 环形图组件：百分比标签与方位图例。',
+  section: 'chart',
+  order: 6,
+  body: [
+    heading(1, '饼图'),
+    paragraph(
+      inlineCode('innerRadius'),
+      ' 大于 0 时为环形图，',
+      inlineCode('labelPosition: "outside"'),
+      ' 用引线把标签放到扇区外（右半区左对齐、左半区右对齐），小扇区文字不再被遮挡；',
+      inlineCode('legend.position'),
+      ' 可切换 top / bottom / right。'
+    ),
     apiTable('PieChartOption', [
       { name: 'data', type: 'readonly PieDatum[]', description: '扇区数据：{ name, value, color? }。' },
       { name: 'radius', type: 'number | string', description: '外半径：px 或百分比（相对 min(w,h)/2），默认 60%。' },
       { name: 'innerRadius', type: 'number | string', description: '内半径：>0 为环形图，默认 0（饼图）。' },
-      { name: 'showLabel', type: 'boolean', description: '扇区百分比标签（平分线方向），默认 true。' },
+      { name: 'labelPosition', type: "'inside' | 'outside'", description: "标签位置：inside 画在扇区内（默认，白字）；outside 画在扇区外并带引线（小扇区/长名称推荐）。" },
+      { name: 'labelLineLength', type: 'number', description: '外部标签引线沿平分线长度（px），默认 14。' },
+      { name: 'labelGap', type: 'number', description: '外部标签与引线端点的水平间距（px），默认 6。' },
+      { name: 'labelLineColor', type: 'string', description: "外部标签引线颜色，默认 '#c0c4cc'。" },
+      { name: 'showLabel', type: 'boolean', description: '是否显示扇区标签，默认 true。' },
       { name: 'startAngle', type: 'number', description: '起始角（弧度），默认 -π/2（12 点方向），顺时针。' },
     ]),
-    demo('chart-pie'),
-    heading(2, '雷达图 RadarChartOption'),
+    demo('chart-pie', PIE_SOURCE),
+  ],
+};
+
+export const chartRadarPage: DocPage = {
+  path: '/transone-chart/radar',
+  title: '雷达图',
+  description: '雷达图组件：多系列对比与指标归一化。',
+  section: 'chart',
+  order: 7,
+  body: [
+    heading(1, '雷达图'),
+    paragraph(
+      inlineCode('indicators'),
+      ' 定义指标轴，',
+      inlineCode('max'),
+      ' 缺省取各系列该指标最大值；',
+      inlineCode('series[].area'),
+      ' 默认填充多边形区域，',
+      inlineCode('splitCount'),
+      ' 控制同心网格层数。'
+    ),
     apiTable('RadarChartOption', [
       { name: 'indicators', type: 'readonly RadarIndicator[]', description: '指标轴：{ name, max? }，max 缺省取各系列该指标最大值。' },
       { name: 'series[].data', type: 'readonly number[]', description: '每系列各指标值，按 indicator.max 归一化。' },
@@ -451,17 +574,7 @@ export const chartChartsPage: DocPage = {
       { name: 'splitCount', type: 'number', description: '同心网格层数，默认 5。' },
       { name: 'startAngle', type: 'number', description: '起始角（弧度），默认 -π/2，顺时针。' },
     ]),
-    demo('chart-radar'),
-    heading(2, '创建图表'),
-    paragraph(
-      '引擎入口',
-      inlineCode('createChart(context, option)'),
-      '按',
-      inlineCode('option.type'),
-      '分发到对应图表策略；',
-      inlineCode('createWebChart / createMiniProgramChart'),
-      '是两端便捷入口。',
-    ),
+    demo('chart-radar', RADAR_SOURCE),
   ],
 };
 
@@ -472,7 +585,7 @@ export const chartCrossPlatformPage: DocPage = {
   title: '跨端集成',
   description: '各端支持状态、小程序端静态编译约束与原生 App 接入路径。',
   section: 'chart',
-  order: 4,
+  order: 8,
   body: [
     heading(1, '跨端集成'),
     heading(2, '支持矩阵'),
@@ -490,6 +603,19 @@ export const chartCrossPlatformPage: DocPage = {
       '小程序端 DPR 通过各端',
       inlineCode('getSystemInfoSync()'),
       '获取，像素比自动适配，无需手工处理。'
+    ),
+    heading(2, '自动重绘'),
+    paragraph(
+      'TcChart 内置尺寸变化自动重绘，防抖窗口',
+      inlineCode('150ms'),
+      '（连续触发只重绘一次），策略按端区分：'
+    ),
+    table(
+      ['平台', '监听方式', '重绘策略'],
+      [
+        ['Web', 'ResizeObserver 观察 canvas（CSS 宽高 100%，容器变化即触发）', '重测 clientWidth/Height 与 DPR → 更新 canvas 物理缓冲 → chart.resize().render() 增量重绘'],
+        ['小程序', '各端窗口尺寸回调（onWindowResize，横竖屏 / 分屏等场景）', '重新解析节点尺寸 → 重建图表渲染'],
+      ]
     ),
     heading(2, '小程序端约束'),
     paragraph(

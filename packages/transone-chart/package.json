@@ -1,6 +1,6 @@
 {
   "name": "transone-chart",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "TransOne 跨端图表库：一份 TypeScript 源码，基于 Canvas 2D 渲染，兼容 Web 与多端小程序，预留原生 App（iOS/Android/鸿蒙）扩展",
   "type": "module",
   "main": "./dist/index.js",

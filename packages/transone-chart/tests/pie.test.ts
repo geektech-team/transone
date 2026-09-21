@@ -119,4 +119,64 @@ describe('PieChart', () => {
     const labels = canvas.of('fillText');
     expect(labels.length).toBe(0);
   });
+
+  test('labelPosition outside：标签画在扇区外（超出外半径）', () => {
+    const canvas = new MockCanvas();
+    const chart = new PieChart(makeContext(canvas), {
+      type: 'pie',
+      data: [
+        { name: 'A', value: 25 },
+        { name: 'B', value: 75 },
+      ],
+      radius: 100,
+      labelPosition: 'outside',
+      legend: { show: false },
+    });
+    chart.render();
+
+    // 圆心 (200, 150)；第一个扇区平分角 -45°，文字 x 应明显超出 圆心+外半径 = 300
+    const texts = canvas.of('fillText') as Array<[string, number, number]>;
+    const labelA = texts.find((args) => args[0] === 'A 25%');
+    expect(labelA).toBeDefined();
+    const [x, y] = [labelA![1], labelA![2]];
+    const dist = Math.hypot(x - 200, y - 150);
+    expect(dist).toBeGreaterThan(100 + 14); // 外半径 + 引线长度
+  });
+
+  test('labelPosition outside：绘制两段式引线（边缘点 → 折点 → 文字）', () => {
+    const canvas = new MockCanvas();
+    const chart = new PieChart(makeContext(canvas), {
+      type: 'pie',
+      data: [
+        { name: 'A', value: 25 },
+        { name: 'B', value: 75 },
+      ],
+      radius: 80,
+      labelPosition: 'outside',
+      legend: { show: false },
+    });
+    chart.render();
+
+    // A 扇区：25% → sweep π/2，midAngle = -π/2 + π/4 = -45°（右上方）
+    // 边缘点 = 圆心 + 80·(cos-45°, sin-45°) = (256.6, 93.4)
+    // 折点 = 圆心 + 94·(cos-45°, sin-45°) = (266.5, 83.5)
+    // 文字点 = 折点向右 6px
+    const moves = canvas.of('moveTo');
+    const lines = canvas.of('lineTo');
+    expect(moves.length).toBe(2); // A、B 各一条引线
+    expect(lines.length).toBeGreaterThanOrEqual(4);
+
+    // 第一条引线属于 A 扇区
+    const start = moves[0] as [number, number];
+    expect(start[0]).toBeCloseTo(200 + 80 * Math.cos(-Math.PI / 4), 0);
+    expect(start[1]).toBeCloseTo(150 + 80 * Math.sin(-Math.PI / 4), 0);
+
+    // 命令流：扇区闭合 lineTo(圆心) → 引线 moveTo → lineTo(折点) → lineTo(文字点)
+    const bend = lines[1] as [number, number];
+    const end = lines[2] as [number, number];
+    expect(bend[0]).toBeCloseTo(200 + 94 * Math.cos(-Math.PI / 4), 0);
+    expect(bend[1]).toBeCloseTo(150 + 94 * Math.sin(-Math.PI / 4), 0);
+    expect(end[0]).toBeGreaterThan(bend[0]); // 右半区水平向右延伸
+    expect(end[1]).toBeCloseTo(bend[1]);
+  });
 });

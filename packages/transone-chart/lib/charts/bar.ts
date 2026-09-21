@@ -9,6 +9,7 @@
 
 import type { ICanvas2D } from '../core/canvas';
 import { ChartBase } from '../core/chart';
+import type { CategoryScale } from '../core/scale';
 import type { LayoutResult } from '../core/layout';
 import type { LegendItem } from '../core/legend';
 import type { BarChartOption, BarSeries } from '../types';
@@ -154,20 +155,25 @@ export class BarChart extends ChartBase<BarChartOption> {
   }
 
   private computeSlot(
-    category: { bandStart(index: number): number; innerWidth(): number },
+    category: CategoryScale,
     groupCount: number,
     explicitWidth?: number
   ): Slot {
+    const band = category.bandWidth;
+    const inner = category.innerWidth();
     if (explicitWidth !== undefined) {
-      // 显式柱宽：组内居中
+      // 显式柱宽：整组在类目带内居中
       return {
-        offset: (category.innerWidth() - explicitWidth) / 2,
+        offset: (band - explicitWidth * groupCount) / 2,
         size: explicitWidth,
       };
     }
-    const size = category.innerWidth() / Math.max(1, groupCount) * 0.8;
-    const gap = (category.innerWidth() - size * groupCount) / 2;
-    return { offset: gap, size };
+    const size = (inner / Math.max(1, groupCount)) * 0.8;
+    // 柱区（size × groupCount）先在 inner 内居中，再随 inner 在类目带内居中，
+    // 保证整组柱中心落在类目中心（与轴标签 center(i) 对齐）。
+    const bandSide = (band - inner) / 2;
+    const innerSide = (inner - size * groupCount) / 2;
+    return { offset: bandSide + innerSide, size };
   }
 
   private drawBar(

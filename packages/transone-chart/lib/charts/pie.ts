@@ -77,19 +77,56 @@ export class PieChart extends ChartBase<PieChartOption> {
       ctx.stroke();
       ctx.restore();
 
-      // 扇区标签：名称 + 百分比，画在扇区角平分线上
+      // 扇区标签：名称 + 百分比
+      // - inside（默认）：画在扇区角平分线上（白字）
+      // - outside：引线把文字引到扇区外（右半区左对齐、左半区右对齐，避免文字跨越中线）
       if (option.showLabel !== false) {
         const midAngle = angle + sweep / 2;
-        const labelRadius = (outerRadius + (innerRadius > 0 ? innerRadius : 0)) / 2 * 0.85;
-        const labelX = centerX + Math.cos(midAngle) * labelRadius;
-        const labelY = centerY + Math.sin(midAngle) * labelRadius;
         const percent = total > 0 ? Math.round((d.value / total) * 100) : 0;
+        const text = `${d.name} ${percent}%`;
 
-        applyFont(ctx, option.labelFontSize ?? 10);
-        ctx.fillStyle = option.labelColor ?? '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${d.name} ${percent}%`, labelX, labelY);
+        if (option.labelPosition === 'outside') {
+          const lineLength = option.labelLineLength ?? 14;
+          const gap = option.labelGap ?? 6;
+          const dirX = Math.cos(midAngle);
+          const dirY = Math.sin(midAngle);
+          // 引线第一段：扇区边缘沿平分线向外
+          const edgeX = centerX + dirX * outerRadius;
+          const edgeY = centerY + dirY * outerRadius;
+          const bendX = centerX + dirX * (outerRadius + lineLength);
+          const bendY = centerY + dirY * (outerRadius + lineLength);
+          // 第二段：水平延伸到文字锚点（右半向右、左半向左）
+          const horizontal = dirX >= 0 ? 1 : -1;
+          const textX = bendX + horizontal * gap;
+          const textY = bendY;
+
+          ctx.save();
+          ctx.strokeStyle = option.labelLineColor ?? '#c0c4cc';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(edgeX, edgeY);
+          ctx.lineTo(bendX, bendY);
+          ctx.lineTo(textX, textY);
+          ctx.stroke();
+          ctx.restore();
+
+          applyFont(ctx, option.labelFontSize ?? 10);
+          ctx.fillStyle = option.labelColor ?? '#323233';
+          ctx.textAlign = horizontal > 0 ? 'left' : 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, textX, textY);
+        } else {
+          const labelRadius =
+            ((outerRadius + (innerRadius > 0 ? innerRadius : 0)) / 2) * 0.85;
+          const labelX = centerX + Math.cos(midAngle) * labelRadius;
+          const labelY = centerY + Math.sin(midAngle) * labelRadius;
+
+          applyFont(ctx, option.labelFontSize ?? 10);
+          ctx.fillStyle = option.labelColor ?? '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, labelX, labelY);
+        }
       }
 
       angle += sweep;

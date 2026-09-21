@@ -19,6 +19,8 @@ export class DemoChartPie extends DemoHost<{ option: PieChartOption }> {
           { name: '搜索', value: 10 },
         ],
         innerRadius: '38%',
+        labelPosition: 'outside', // 标签引线到扇区外，避免小扇区文字被遮挡
+        labelLineLength: 18,
       },
     };
   }
@@ -54,7 +56,7 @@ export class DemoChartPie extends DemoHost<{ option: PieChartOption }> {
         tag: 'p',
         props: { className: 'tu-demo__note' },
         children: [
-          'innerRadius 大于 0 时为环形图；legend.position 可切换 top / bottom / right；showLabel 绘制平分线方向百分比标签。',
+          'innerRadius 大于 0 时为环形图；labelPosition: outside 用引线把标签放到扇区外（右半区左对齐、左半区右对齐），小扇区文字不再被遮挡。',
         ],
       },
     ];

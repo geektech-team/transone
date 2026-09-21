@@ -43,6 +43,8 @@ class MyPage extends Component {
 ```
 
 `TcChart` 是**受控组件**：`option` 由父级传入，数据变化自动 `setOption + render`；组件卸载自动销毁。
+尺寸变化（容器宽度 / 窗口横竖屏）自动**防抖重绘（150ms）**：Web 用 ResizeObserver 增量 `resize + render`，
+小程序端用窗口尺寸回调重建，无需手动调用。
 
 ### 方式二：引擎直用（无框架场景）
 
@@ -71,7 +73,7 @@ chart3.render();
 |---|---|---|
 | 折线 | `LineChartOption` | `smooth` 平滑曲线、`area` 面积填充、`showSymbol` 数据点、`startFromZero` |
 | 柱状 | `BarChartOption` | `stack` 堆叠分组、`horizontal` 横向、`borderRadius` 圆角、`barWidth` |
-| 饼图 | `PieChartOption` | `radius / innerRadius`（环形）、`startAngle`、扇区百分比标签 |
+| 饼图 | `PieChartOption` | `radius / innerRadius`（环形）、`startAngle`、`labelPosition: 'outside'` 引线外置标签 |
 | 雷达 | `RadarChartOption` | `indicators[].max` 归一化、`splitCount` 网格层、`area` 多边形填充 |
 
 完整字段见 [`lib/types.ts`](./lib/types.ts)（每个字段均带中文注释）。
@@ -157,7 +159,7 @@ save → scale(dpr) → clear → 背景 → 布局(title/legend/轴区逐层扣
 ## 开发
 
 ```bash
-bun test                  # 46 个单测（mock canvas 断言绘制命令）
+bun test                  # 53 个单测（mock canvas 断言绘制命令 + 防抖 / resize）
 bun run build             # tsc 声明 + Bun.build（minify, ESM）
 bun run --cwd ../../playground/chart-demo build:web   # 演示项目构建
 ```
@@ -167,7 +169,7 @@ bun run --cwd ../../playground/chart-demo build:web   # 演示项目构建
 ```
 packages/transone-chart/
 ├── lib/               # 源码（core / charts / adapters / factory / component / types）
-├── tests/             # 单测（scale / layout / line / bar / pie / radar / factory）
+├── tests/             # 单测（scale / layout / line / bar / pie / radar / factory / debounce / resize）
 ├── scripts/build.ts   # 构建脚本
 └── playground 演示：playground/chart-demo（城市指数场景，五种图表卡片）
 ```
