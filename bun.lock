@@ -27,7 +27,7 @@
     },
     "packages/transone-chart": {
       "name": "transone-chart",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "devDependencies": {
         "transone": "workspace:*",
       },
@@ -37,7 +37,7 @@
     },
     "packages/transone-cli": {
       "name": "transone-cli",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "bin": {
         "transone": "bin/transone.ts",
       },

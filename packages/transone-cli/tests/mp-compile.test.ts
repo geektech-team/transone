@@ -392,6 +392,28 @@ describe('mp compile: 页面模板', () => {
     expect(refresh.fn).toContain('this.setData({ refreshed: true })');
   });
 
+  it('页面直接声明 onLoad 时保留路由参数并映射到 Page', async () => {
+    const { unit } = await compile(
+      'page',
+      'city',
+      `
+      import { Component, h } from 'transone';
+      export class App extends Component {
+        render() {
+          return h('div', {}, 'x');
+        }
+        onLoad(options: { name?: string } = {}) {
+          this.setState({ name: options.name ?? '北京' });
+        }
+      }`
+    );
+
+    const onLoad = unit.lifecycle.find((entry) => entry.key === 'onLoad');
+    expect(onLoad).toBeDefined();
+    expect(onLoad?.fn).toContain('function (options = {})');
+    expect(onLoad?.fn).toContain("this.setData({ name: options.name ?? '北京' })");
+  });
+
   it('样式数字值按 px 输出，0 与无单位属性不加单位', async () => {
     const { unit } = await compile(
       'page',

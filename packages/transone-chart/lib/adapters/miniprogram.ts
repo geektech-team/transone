@@ -18,6 +18,10 @@ export interface MiniProgramCanvasNode {
   getContext(type: '2d'): unknown;
   width: number;
   height: number;
+  /** SelectorQuery 返回的 CSS 逻辑尺寸；物理缓冲区仍使用 width / height。 */
+  logicalWidth?: number;
+  logicalHeight?: number;
+  pixelRatio?: number;
 }
 
 export type MiniProgramGlobal = 'wx' | 'my' | 'tt';
@@ -69,7 +73,9 @@ export function getMiniProgramCanvasNode(options: {
       .select(options.selector)
       .fields({ node: true, size: true })
       .exec((res: unknown) => {
-        const first = Array.isArray(res) ? res[0] : undefined;
+        const first = (Array.isArray(res) ? res[0] : undefined) as
+          | { node?: MiniProgramCanvasNode; width?: number; height?: number }
+          | undefined;
         const node = first?.node as MiniProgramCanvasNode | undefined;
         if (!node || typeof node.getContext !== 'function') {
           reject(
@@ -78,6 +84,19 @@ export function getMiniProgramCanvasNode(options: {
             )
           );
           return;
+        }
+        const logicalWidth = first?.width;
+        const logicalHeight = first?.height;
+        if (
+          typeof logicalWidth === 'number' && logicalWidth > 0 &&
+          typeof logicalHeight === 'number' && logicalHeight > 0
+        ) {
+          const dpr = detectMiniProgramPixelRatio(platform);
+          node.logicalWidth = logicalWidth;
+          node.logicalHeight = logicalHeight;
+          node.pixelRatio = dpr;
+          node.width = Math.round(logicalWidth * dpr);
+          node.height = Math.round(logicalHeight * dpr);
         }
         resolve(node);
       });
@@ -130,9 +149,9 @@ export function resolveMiniProgramCanvas(
     throw new Error('resolveMiniProgramCanvas: 2d context is not available');
   }
 
-  const dpr = options.dpr ?? detectMiniProgramPixelRatio();
-  const width = options.width ?? node.width;
-  const height = options.height ?? node.height;
+  const dpr = options.dpr ?? node.pixelRatio ?? detectMiniProgramPixelRatio();
+  const width = options.width ?? node.logicalWidth ?? node.width;
+  const height = options.height ?? node.logicalHeight ?? node.height;
   const ctx = ctx2d as unknown as ICanvas2D;
 
   return { ctx, width, height, dpr, palette: options.palette };

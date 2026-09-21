@@ -1102,6 +1102,11 @@ function compileSlot(
     nameExpr,
     'slot 名称'
   );
+  // TransOne 统一以 slot('default') 表示默认插槽；小程序模板中默认插槽
+  // 必须省略 name，否则调用侧未声明 slot="default" 的普通子节点不会被投影。
+  if (name === 'default') {
+    return [indent(env.indent) + '<slot/>'];
+  }
   return [indent(env.indent) + `<slot name="${name}"/>`];
 }
 

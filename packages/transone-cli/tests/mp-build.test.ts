@@ -60,11 +60,11 @@ function makeRoot(): string {
   writeFileSync(
     join(root, 'src', 'components', 'Badge.ts'),
     `
-      import { Component, h } from '${frameworkEntryPath}';
+      import { Component, h, slot } from '${frameworkEntryPath}';
 
       export class Badge extends Component {
         render() {
-          return h('div', {}, this.props.label);
+          return h('div', {}, [this.props.label, slot('default')]);
         }
       }
     `
@@ -154,6 +154,12 @@ describe('mp build', () => {
       readFileSync(join(out, 'components', 'badge', 'badge.json'), 'utf8')
     );
     expect(badgeJson.component).toBe(true);
+    const badgeWxml = readFileSync(
+      join(out, 'components', 'badge', 'badge.wxml'),
+      'utf8'
+    );
+    expect(badgeWxml).toContain('<slot/>');
+    expect(badgeWxml).not.toContain('<slot name="default"/>');
 
     // 全局样式合并进 app.wxss（body -> page）
     const appWxss = readFileSync(join(out, 'app.wxss'), 'utf8');

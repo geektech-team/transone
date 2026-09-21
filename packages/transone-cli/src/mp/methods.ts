@@ -5,6 +5,7 @@ import { ClassSource, CompileContext, FunctionEntry, UnitKind } from './types';
 
 const PAGE_LIFECYCLE: Record<string, string> = {
   beforeMount: 'onLoad',
+  onLoad: 'onLoad',
   onMounted: 'onReady',
   onUnmounted: 'onUnload',
   // 小程序页面独有生命周期：同名方法直接映射（下拉刷新/触底加载/分享等）

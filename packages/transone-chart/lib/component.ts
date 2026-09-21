@@ -70,6 +70,14 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   }
 
   protected initStyles(): void {
+    this.styleManager.addStyle('tc-chart-host', {
+      selector: ':host',
+      properties: {
+        display: 'block',
+        height: '100%',
+        width: '100%',
+      },
+    });
     this.styleManager.addStyle('tc-chart-canvas', {
       selector: '.tc-chart__canvas',
       properties: {
@@ -147,11 +155,11 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
 
   /** Web 端绑定 hover 事件：鼠标移动命中数据点即显示 tooltip，离开清除。 */
   private setupHoverEvents(): void {
-    if (this.destroyed || this.hoverHandlers.length > 0) {
-      return;
-    }
     // 小程序端暂无鼠标事件，一期仅 Web；后续可在 touchstart/touchmove 接入同一 setHover API
     if (detectMiniProgramGlobal()) {
+      return;
+    }
+    if (this.destroyed || this.hoverHandlers.length > 0) {
       return;
     }
     const element = this.getElement() as HTMLCanvasElement | null;

@@ -9,7 +9,10 @@ import {
   createMiniProgramChart,
   createWebChart,
 } from '../lib/factory';
-import { resolveMiniProgramCanvas } from '../lib/adapters/miniprogram';
+import {
+  getMiniProgramCanvasNode,
+  resolveMiniProgramCanvas,
+} from '../lib/adapters/miniprogram';
 import type { ChartRenderContext } from '../lib/types';
 import { MockCanvas } from './mock-canvas';
 
@@ -115,5 +118,36 @@ describe('resolveMiniProgramCanvas', () => {
     expect(context.height).toBe(200);
     expect(context.dpr).toBe(2);
     expect(context.ctx).toBe(ctx);
+  });
+
+  test('SelectorQuery 尺寸作为逻辑尺寸，并按 DPR 设置物理缓冲区', async () => {
+    const ctx = new MockCanvas();
+    const node = { width: 0, height: 0, getContext: () => ctx };
+    const originalWx = Reflect.get(globalThis, 'wx');
+    Reflect.set(globalThis, 'wx', {
+      getSystemInfoSync: () => ({ pixelRatio: 2 }),
+      createSelectorQuery: () => ({
+        in() { return this; },
+        select() { return this; },
+        fields() { return this; },
+        exec(callback: (result: unknown[]) => void) {
+          callback([{ node, width: 160, height: 120 }]);
+        },
+      }),
+    });
+
+    try {
+      const resolved = await getMiniProgramCanvasNode({ selector: '#chart' });
+      const context = resolveMiniProgramCanvas(resolved);
+
+      expect(node.width).toBe(320);
+      expect(node.height).toBe(240);
+      expect(context.width).toBe(160);
+      expect(context.height).toBe(120);
+      expect(context.dpr).toBe(2);
+    } finally {
+      if (originalWx === undefined) Reflect.deleteProperty(globalThis, 'wx');
+      else Reflect.set(globalThis, 'wx', originalWx);
+    }
   });
 });
