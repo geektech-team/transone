@@ -40,11 +40,74 @@ export const IOS_DIALECT: NativeDialect = {
     return {
       'TransOneApp/TransOneApp.swift': `import SwiftUI\n\n@main struct TransOneApp: App { var body: some Scene { WindowGroup { ContentView() } } }\n`,
       'TransOneApp/ContentView.swift': `import SwiftUI\n\nstruct ContentView: View {\n${swiftState(screen)}\n  var body: some View {\n${swiftNode(screen.root)}\n  }\n}\n`,
-      'TransOneApp.xcodeproj/project.pbxproj': `// !$*UTF8*$!\n// Generated TransOne Xcode project: ${config.appName}\n`,
+      'TransOneApp.xcodeproj/project.pbxproj': xcodeProject(config),
       'TransOneApp/Assets.xcassets/Contents.json': '{"info":{"author":"xcode","version":1}}\n',
     };
   },
 };
+
+function xcodeProject(config: { appName: string; bundleId: string; minPlatformVersion: string }): string {
+  const escapedName = config.appName.replace(/"/g, '\\"');
+  return `// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 56;
+  objects = {
+
+/* Begin PBXBuildFile section */
+    A00100000000000000000001 /* TransOneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100000000000000000011 /* TransOneApp.swift */; };
+    A00100000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100000000000000000012 /* ContentView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+    A00100000000000000000011 /* TransOneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransOneApp.swift; sourceTree = "<group>"; };
+    A00100000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+    A00100000000000000000013 /* TransOneApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TransOneApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+    A00100000000000000000021 = {isa = PBXGroup; children = (A00100000000000000000022 /* TransOneApp */, A00100000000000000000023 /* Products */, ); sourceTree = "<group>"; };
+    A00100000000000000000022 /* TransOneApp */ = {isa = PBXGroup; children = (A00100000000000000000011 /* TransOneApp.swift */, A00100000000000000000012 /* ContentView.swift */, ); path = TransOneApp; sourceTree = "<group>"; };
+    A00100000000000000000023 /* Products */ = {isa = PBXGroup; children = (A00100000000000000000013 /* TransOneApp.app */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+    A00100000000000000000031 /* TransOneApp */ = {isa = PBXNativeTarget; buildConfigurationList = A00100000000000000000041 /* Build configuration list for PBXNativeTarget "TransOneApp" */; buildPhases = (A00100000000000000000032 /* Sources */, A00100000000000000000033 /* Frameworks */, A00100000000000000000034 /* Resources */, ); buildRules = (); dependencies = (); name = TransOneApp; productName = TransOneApp; productReference = A00100000000000000000013 /* TransOneApp.app */; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+    A00100000000000000000051 /* Project object */ = {isa = PBXProject; attributes = { LastUpgradeCheck = 2700; TargetAttributes = { A00100000000000000000031 = { CreatedOnToolsVersion = 27.0; }; }; }; buildConfigurationList = A00100000000000000000052 /* Build configuration list for PBXProject "TransOneApp" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = A00100000000000000000021; productRefGroup = A00100000000000000000023; projectDirPath = ""; projectRoot = ""; targets = (A00100000000000000000031 /* TransOneApp */, ); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+    A00100000000000000000034 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+    A00100000000000000000032 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100000000000000000001 /* TransOneApp.swift in Sources */, A00100000000000000000002 /* ContentView.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+    A00100000000000000000033 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+    A00100000000000000000061 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+    A00100000000000000000062 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+    A00100000000000000000063 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = ${config.minPlatformVersion}; PRODUCT_BUNDLE_IDENTIFIER = ${config.bundleId}; PRODUCT_NAME = "${escapedName}"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+    A00100000000000000000064 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES; CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = ${config.minPlatformVersion}; PRODUCT_BUNDLE_IDENTIFIER = ${config.bundleId}; PRODUCT_NAME = "${escapedName}"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+    A00100000000000000000041 /* Build configuration list for PBXNativeTarget "TransOneApp" */ = {isa = XCConfigurationList; buildConfigurations = (A00100000000000000000063 /* Debug */, A00100000000000000000064 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A00100000000000000000052 /* Build configuration list for PBXProject "TransOneApp" */ = {isa = XCConfigurationList; buildConfigurations = (A00100000000000000000061 /* Debug */, A00100000000000000000062 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+  };
+  rootObject = A00100000000000000000051 /* Project object */;
+}
+`;
+}
 
 export const ANDROID_DIALECT: NativeDialect = {
   id: 'app-android', label: 'Android 原生 App（Jetpack Compose）', resourceDirectory: 'app/src/main/assets',

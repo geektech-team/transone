@@ -103,6 +103,23 @@ describe('native app build', () => {
     expect(readFileSync(join(harmony.outDir, 'entry/src/main/ets/pages/Index.ets'), 'utf8')).toContain('Text("count: " + this.count)');
   });
 
+  it('emits an Xcode project with an application target and Swift source build phase', async () => {
+    const root = makeRoot();
+    writeFileSync(join(root, 'src', 'main.ts'), `
+      export class App { render() { return { tag: 'main', children: [] }; } }
+    `);
+    const result = await build({ root, target: 'app-ios' });
+    const project = readFileSync(
+      join(result.outDir, 'TransOneApp.xcodeproj/project.pbxproj'),
+      'utf8'
+    );
+    expect(project).toContain('isa = PBXProject;');
+    expect(project).toContain('isa = PBXNativeTarget;');
+    expect(project).toContain('isa = PBXSourcesBuildPhase;');
+    expect(project).toContain('ContentView.swift in Sources');
+    expect(project).toContain('PRODUCT_BUNDLE_IDENTIFIER = com.transone.app;');
+  });
+
   it('rejects unsupported source before replacing existing output', async () => {
     const root = makeRoot();
     writeFileSync(join(root, 'src', 'main.ts'), `
