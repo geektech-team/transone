@@ -39,6 +39,22 @@ export const MP_TARGET_TYPES = [
 
 export type MpTargetType = (typeof MP_TARGET_TYPES)[number];
 
+/** 原生 App 目标端类型（app-*）。 */
+export const APP_TARGET_TYPES = [
+  'app-ios',
+  'app-android',
+  'app-harmony',
+] as const satisfies readonly TargetType[];
+
+export type AppTargetType = (typeof APP_TARGET_TYPES)[number];
+
+export function isAppTargetType(value: unknown): value is AppTargetType {
+  return (
+    typeof value === 'string' &&
+    (APP_TARGET_TYPES as readonly string[]).includes(value)
+  );
+}
+
 export function isMpTargetType(value: unknown): value is MpTargetType {
   return (
     typeof value === 'string' &&

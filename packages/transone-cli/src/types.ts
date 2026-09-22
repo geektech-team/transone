@@ -1,12 +1,39 @@
-import type { MpTargetType, TargetType } from './target/types';
+import type { AppTargetType, MpTargetType, TargetType } from './target/types';
 
 export type { MpTargetType, TargetType } from './target/types';
 export {
   MP_TARGET_TYPES,
+  APP_TARGET_TYPES,
+  isAppTargetType,
   isMpTargetType,
   isTargetType,
   TARGET_TYPES,
 } from './target/types';
+
+/** 原生 App 目标通用配置。 */
+export interface AppConfig {
+  appName?: string;
+  bundleId?: string;
+  outDir?: string;
+  minPlatformVersion?: string;
+  publicDir?: string;
+  /** App 专用页面；默认复用顶层 pages。首期仅支持一个页面。 */
+  pages?: Record<string, string>;
+}
+
+/** 按原生 App 平台分组的配置。 */
+export type AppConfigMap = Partial<Record<AppTargetType, AppConfig>>;
+
+export type UserAppConfig = AppConfig | AppConfigMap;
+
+export interface ResolvedAppConfig {
+  appName: string;
+  bundleId: string;
+  outDir: string;
+  minPlatformVersion: string;
+  publicDir: string;
+  pages: Record<string, string>;
+}
 
 export interface ProxyOptions {
   target: string;
@@ -117,6 +144,8 @@ export interface UserConfig {
   library?: LibraryConfig;
   /** 小程序目标端配置：单一配置（作用于所有 mp 目标）或按平台分组（'mp-weixin' / 'mp-alipay' / 'mp-bytedance'）。 */
   mp?: UserMiniProgramConfig;
+  /** 原生 App 目标配置：扁平配置或按 app-* 平台分组。 */
+  app?: UserAppConfig;
 }
 
 export interface ResolveConfigOptions {
@@ -163,4 +192,6 @@ export interface ResolvedConfig {
   library?: ResolvedLibraryConfig;
   /** 微信小程序目标端配置（--target mp-weixin）。 */
   mp?: ResolvedMiniProgramConfig;
+  /** 原生 App 目标配置（仅 --target app-* 时存在）。 */
+  app?: ResolvedAppConfig;
 }

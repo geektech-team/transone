@@ -18,4 +18,11 @@ export default defineConfig({
       navigationBarTitleText: 'TransOne 演练',
     },
   },
+  app: {
+    appName: 'TransOne Counter',
+    bundleId: 'com.geektech.transone.counter',
+    pages: {
+      '/': 'src/app.ts',
+    },
+  },
 });

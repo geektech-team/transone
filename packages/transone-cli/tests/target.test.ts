@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { build } from '../src/build';
 import { parseCliArgs } from '../src/cli';
 import { targetRegistry } from '../src/target/registry';
-import { PlaceholderTarget } from '../src/target/placeholder-target';
+import { AppTarget } from '../src/target/app-target';
 import { WebTarget } from '../src/target/web-target';
 import { MpTarget } from '../src/target/mp-target';
 import { TARGET_TYPES, isTargetType } from '../src/target/types';
@@ -16,7 +16,16 @@ function createTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'transone-test-'));
   const srcDir = join(root, 'src');
   mkdirSync(srcDir, { recursive: true });
-  writeFileSync(join(srcDir, 'main.ts'), 'export const app = {};\n');
+  writeFileSync(
+    join(srcDir, 'main.ts'),
+    `export class App {
+      initState() { return { count: 0 }; }
+      increment() { this.state.count += 1; }
+      render() { return { tag: 'main', children: [
+        { tag: 'button', listeners: { click: () => this.increment() }, children: ['+1'] }
+      ] }; }
+    }\n`
+  );
   tempRoots.push(root);
   return root;
 }
@@ -54,23 +63,9 @@ describe('Target 抽象', () => {
     }
   });
 
-  it('app-* 远期目标应解析为 PlaceholderTarget 并在构建时快速报错', () => {
+  it('app-* 目标应解析为 AppTarget', () => {
     const target = targetRegistry.resolve('app-ios');
-    expect(target).toBeInstanceOf(PlaceholderTarget);
-
-    expect(
-      target.build(
-        {
-          root: '/tmp',
-          entry: '/tmp/src/main.ts',
-          pages: { '/': '/tmp/src/main.ts' },
-          target: 'app-ios',
-          server: { host: '127.0.0.1', port: 1, proxy: {} },
-          build: { outDir: '/tmp/dist', basePath: '', directoryPages: false },
-        },
-        {}
-      )
-    ).rejects.toThrow(/app-ios.*尚未实现.*远期/);
+    expect(target).toBeInstanceOf(AppTarget);
   });
 
   it('isTargetType 应校验合法与非法目标端', () => {
@@ -111,7 +106,7 @@ describe('CLI --target 参数', () => {
     );
   });
 
-  it('远期 App 目标端构建应失败而非产出残缺工程', async () => {
+  it('App 目标端构建应生成原生工程', async () => {
     const root = createTempProject();
     await expect(
       build({
@@ -119,6 +114,9 @@ describe('CLI --target 参数', () => {
         target: 'app-ios',
         config: { entry: 'src/main.ts' },
       })
-    ).rejects.toThrow(/app-ios.*尚未实现.*远期/);
+    ).resolves.toMatchObject({
+      outDir: expect.stringContaining('app-ios'),
+      assetsBuilt: expect.arrayContaining([expect.stringContaining('ContentView.swift')]),
+    });
   });
 });

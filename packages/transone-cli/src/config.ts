@@ -1,19 +1,29 @@
 import type { TargetType } from './target/types';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isMpTargetType, isTargetType, MP_TARGET_TYPES } from './target/types';
+import {
+  APP_TARGET_TYPES,
+  isAppTargetType,
+  isMpTargetType,
+  isTargetType,
+  MP_TARGET_TYPES,
+} from './target/types';
 import type {
   BuildConfig,
+  AppConfig,
+  AppConfigMap,
   LibraryConfig,
   MiniProgramConfig,
   MiniProgramConfigMap,
   ProxyOptions,
   ResolveConfigOptions,
   ResolvedConfig,
+  ResolvedAppConfig,
   ResolvedLibraryConfig,
   ResolvedMiniProgramConfig,
   ServerConfig,
   UserConfig,
+  UserAppConfig,
   UserMiniProgramConfig,
 } from './types';
 
@@ -32,6 +42,7 @@ interface MergedConfig {
   };
   library?: LibraryConfig;
   mp?: UserMiniProgramConfig;
+  app?: UserAppConfig;
 }
 
 type ConfigFileLoadResult =
@@ -95,6 +106,7 @@ export async function resolveConfig(
   // --target mp-weixin 时启用小程序构建；config.mp 缺失则走默认值
   // （touristappid / dist/build/mp-weixin / pages 复用 config.pages）。
   const mpEnabled = config.mp !== undefined || target === 'mp-weixin';
+  const appConfig = pickAppConfig(config.app, target);
 
   return {
     root,
@@ -126,6 +138,51 @@ export async function resolveConfig(
           ),
         }
       : {}),
+    ...(isAppTargetType(target)
+      ? { app: await resolveApp(root, options.outDir, appConfig ?? {}, target, pages) }
+      : {}),
+  };
+}
+
+function isAppConfigMap(value: unknown): value is AppConfigMap {
+  return (
+    isRecord(value) &&
+    APP_TARGET_TYPES.some((platform) => platform in value)
+  );
+}
+
+function pickAppConfig(
+  app: UserAppConfig | undefined,
+  target: TargetType
+): AppConfig | undefined {
+  if (app === undefined) {
+    return undefined;
+  }
+  if (isAppConfigMap(app)) {
+    return isAppTargetType(target) ? app[target] : undefined;
+  }
+  return app;
+}
+
+async function resolveApp(
+  root: string,
+  outDirOverride: string | undefined,
+  app: AppConfig,
+  target: TargetType,
+  fallbackPages: Record<string, string>
+): Promise<ResolvedAppConfig> {
+  return {
+    appName: app.appName ?? 'TransOne',
+    bundleId: app.bundleId ?? 'com.transone.app',
+    outDir: resolve(root, outDirOverride ?? app.outDir ?? `dist/build/${target}`),
+    minPlatformVersion: app.minPlatformVersion ?? '16.0',
+    publicDir: resolve(root, app.publicDir ?? 'public'),
+    pages: app.pages
+      ? await resolvePages(root, resolve(root, app.pages['/'] ?? 'src/main.ts'), app.pages, {
+          includeEntry: false,
+          allowRoot: true,
+        })
+      : fallbackPages,
   };
 }
 
@@ -329,6 +386,7 @@ function mergeConfig(...configs: UserConfig[]): MergedConfig {
       },
       library: config.library ?? merged.library,
       mp: config.mp ?? merged.mp,
+      app: config.app ?? merged.app,
     };
   }, DEFAULT_CONFIG);
 }
@@ -353,6 +411,41 @@ function validateUserConfig(config: unknown): asserts config is UserConfig {
   }
   if (config.mp !== undefined) {
     validateMpConfig(config.mp);
+  }
+  if (config.app !== undefined) {
+    validateAppConfig(config.app);
+  }
+}
+
+function validateAppConfig(app: unknown): asserts app is UserAppConfig {
+  assertRecord(app, 'Config app');
+  if (isAppConfigMap(app)) {
+    const flatKeys = ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir', 'pages'];
+    if (flatKeys.some((key) => key in app)) {
+      throw new Error('Config app cannot mix flat fields with platform keys');
+    }
+    for (const platform of APP_TARGET_TYPES) {
+      if (app[platform] !== undefined) {
+        validateSingleAppConfig(app[platform], `Config app.${platform}`);
+      }
+    }
+    return;
+  }
+  validateSingleAppConfig(app, 'Config app');
+}
+
+function validateSingleAppConfig(
+  app: unknown,
+  label: string
+): asserts app is AppConfig {
+  assertRecord(app, label);
+  for (const key of ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir'] as const) {
+    if (app[key] !== undefined && typeof app[key] !== 'string') {
+      throw new Error(`${label}.${key} must be a string`);
+    }
+  }
+  if (app.pages !== undefined) {
+    validatePagesConfig(app.pages, `${label}.pages`);
   }
 }
 

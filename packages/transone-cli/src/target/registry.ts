@@ -1,7 +1,8 @@
 import type { BuildTarget, TargetType } from './types';
 import { WebTarget } from './web-target';
 import { mpAlipayTarget, mpBytedanceTarget, mpWeixinTarget } from './mp-target';
-import { PlaceholderTarget } from './placeholder-target';
+import { AppTarget } from './app-target';
+import { ANDROID_DIALECT, HARMONY_DIALECT, IOS_DIALECT } from '../app/dialects';
 
 /**
  * 目标端注册表：编译器按 Target 分发代码生成（positioning 7.3）。
@@ -17,15 +18,9 @@ export class TargetRegistry {
     this.register(mpWeixinTarget);
     this.register(mpAlipayTarget);
     this.register(mpBytedanceTarget);
-    this.register(
-      new PlaceholderTarget('app-ios', 'iOS 原生 App', '远期')
-    );
-    this.register(
-      new PlaceholderTarget('app-android', 'Android 原生 App', '远期')
-    );
-    this.register(
-      new PlaceholderTarget('app-harmony', '鸿蒙原生 App（ArkUI）', '远期')
-    );
+    this.register(new AppTarget(IOS_DIALECT));
+    this.register(new AppTarget(ANDROID_DIALECT));
+    this.register(new AppTarget(HARMONY_DIALECT));
   }
 
   public register(target: BuildTarget): void {

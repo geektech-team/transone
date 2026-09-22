@@ -8,6 +8,9 @@
     "build:weixin": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-weixin",
     "build:alipay": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-alipay",
     "build:bytedance": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target mp-bytedance",
+    "build:ios": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-ios",
+    "build:android": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-android",
+    "build:harmony": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-harmony",
     "preview": "bun scripts/preview.ts"
   },
   "dependencies": {
