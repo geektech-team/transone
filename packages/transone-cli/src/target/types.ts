@@ -6,16 +6,18 @@ import type { BuildOptions, BuildResult } from '../types';
  *
  * 编译器按 Target 分发代码生成（见 positioning 7.3）：
  * - web            直接渲染（HTML + 浏览器运行时，与 TSone 一致）
- * - mp-weixin      WXML / WXSS / JS 静态转换（路线图 M2）
- * - mp-alipay      AXML / ACSS 静态转换（路线图 M3）
- * - mp-bytedance   ttml / ttss 静态转换（路线图 M3）
- * - app-*          远期占位（app-ios / app-android / app-harmony）
+ * - mp-weixin      WXML / WXSS / JS 静态转换
+ * - mp-alipay      AXML / ACSS 静态转换
+ * - mp-bytedance   TTML / TTSS 静态转换
+ * - mp-xiaohongshu XHSML / CSS 静态转换
+ * - app-*          原生应用源码生成（app-ios / app-android / app-harmony）
  */
 export const TARGET_TYPES = [
   'web',
   'mp-weixin',
   'mp-alipay',
   'mp-bytedance',
+  'mp-xiaohongshu',
   'app-ios',
   'app-android',
   'app-harmony',
@@ -35,6 +37,7 @@ export const MP_TARGET_TYPES = [
   'mp-weixin',
   'mp-alipay',
   'mp-bytedance',
+  'mp-xiaohongshu',
 ] as const satisfies readonly TargetType[];
 
 export type MpTargetType = (typeof MP_TARGET_TYPES)[number];

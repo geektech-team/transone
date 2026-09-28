@@ -153,8 +153,39 @@ export const MP_BYTEDANCE_DIALECT: MpDialect = {
   }),
 };
 
+export const MP_XIAOHONGSHU_DIALECT: MpDialect = {
+  id: 'mp-xiaohongshu',
+  label: '小红书小程序原生工程（XHSML / CSS / JS 静态转换）',
+  templateExt: 'xhsml',
+  styleExt: 'css',
+  appStyleFile: 'app.css',
+  directivePrefix: 'xhs:',
+  bindEvent: (event) => `bind${event}`,
+  catchEvent: (event) => `catch${event}`,
+  projectConfigFile: 'project.config.json',
+  buildProjectConfig: (mp, projectName) => ({
+    appid: mp.appId,
+    projectname: projectName,
+    compileType: 'miniprogram',
+  }),
+  windowDefaults: (title) => ({
+    navigationBarTitleText: title,
+    navigationBarBackgroundColor: '#ffffff',
+    navigationBarTextStyle: 'black',
+    backgroundTextStyle: 'light',
+  }),
+  appJsonExtras: () => ({}),
+  sitemap: false,
+  componentJson: (usingComponents) => ({
+    component: true,
+    multipleSlots: true,
+    usingComponents,
+  }),
+};
+
 export const MP_DIALECTS: Record<string, MpDialect> = {
   'mp-weixin': MP_WEIXIN_DIALECT,
   'mp-alipay': MP_ALIPAY_DIALECT,
   'mp-bytedance': MP_BYTEDANCE_DIALECT,
+  'mp-xiaohongshu': MP_XIAOHONGSHU_DIALECT,
 };

@@ -10,6 +10,7 @@ import {
   TuBadge,
   TuButton,
   TuCell,
+  TuCarousel,
   TuCheckbox,
   TuEmpty,
   TuInput,
@@ -53,6 +54,8 @@ interface UiDemoState {
   searchValue: string;
   searchNote: string;
   tabsActive: number;
+  carouselActive: number;
+  carouselIndicatorIndexes: number[];
   tabsItems: Array<{ title: string; disabled?: boolean }>;
   navbarNote: string;
   cellNote: string;
@@ -90,6 +93,8 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
       searchValue: '',
       searchNote: '',
       tabsActive: 0,
+      carouselActive: 0,
+      carouselIndicatorIndexes: [0, 1, 2],
       tabsItems: [
         { title: '标签一' },
         { title: '标签二' },
@@ -625,6 +630,67 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
         h('p', { className: 'demo-note' }, [`当前激活：${this.state.tabsActive}（禁用项不可点）`]),
       ]),
       h('div', { className: 'demo-section' }, [
+        h('h2', { className: 'demo-section-title' }, ['Carousel']),
+        createComponent({
+          component: TuCarousel,
+          props: {
+            active: this.state.carouselActive,
+            count: 3,
+            indicatorIndexes: this.state.carouselIndicatorIndexes,
+            loop: true,
+          },
+          children: [
+            h(
+              'div',
+              {
+                className: 'tu-carousel__slide',
+                style: {
+                  alignItems: 'center',
+                  backgroundColor: '#1677ff',
+                  color: '#ffffff',
+                  display: 'flex',
+                  height: '140px',
+                  justifyContent: 'center',
+                },
+              },
+              ['第一页']
+            ),
+            h(
+              'div',
+              {
+                className: 'tu-carousel__slide',
+                style: {
+                  alignItems: 'center',
+                  backgroundColor: '#00b578',
+                  color: '#ffffff',
+                  display: 'flex',
+                  height: '140px',
+                  justifyContent: 'center',
+                },
+              },
+              ['第二页']
+            ),
+            h(
+              'div',
+              {
+                className: 'tu-carousel__slide',
+                style: {
+                  alignItems: 'center',
+                  backgroundColor: '#ff8f1f',
+                  color: '#ffffff',
+                  display: 'flex',
+                  height: '140px',
+                  justifyContent: 'center',
+                },
+              },
+              ['第三页']
+            ),
+          ],
+          emitters: { change: (index) => this.handleCarouselChange(index) },
+        }),
+        h('p', { className: 'demo-note' }, [`当前页：${this.state.carouselActive + 1}（支持滑动、点击指示点，首尾循环）`]),
+      ]),
+      h('div', { className: 'demo-section' }, [
         h('h2', { className: 'demo-section-title' }, ['Navbar']),
         createComponent({
           component: TuNavbar,
@@ -843,6 +909,10 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
 
   protected handleTabsChange(index: unknown): void {
     this.state.tabsActive = Number(index);
+  }
+
+  protected handleCarouselChange(index: unknown): void {
+    this.state.carouselActive = Number(index);
   }
 
   protected handleNavbarLeft(): void {

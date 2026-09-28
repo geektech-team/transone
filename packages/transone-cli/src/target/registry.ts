@@ -1,14 +1,19 @@
 import type { BuildTarget, TargetType } from './types';
 import { WebTarget } from './web-target';
-import { mpAlipayTarget, mpBytedanceTarget, mpWeixinTarget } from './mp-target';
+import {
+  mpAlipayTarget,
+  mpBytedanceTarget,
+  mpWeixinTarget,
+  mpXiaohongshuTarget,
+} from './mp-target';
 import { AppTarget } from './app-target';
 import { ANDROID_DIALECT, HARMONY_DIALECT, IOS_DIALECT } from '../app/dialects';
 
 /**
  * 目标端注册表：编译器按 Target 分发代码生成（positioning 7.3）。
  *
- * M1 注册 web；M2 注册 mp-weixin；M3 注册 mp-alipay / mp-bytedance；
- * app-* 以占位 Target 注册，构建时给出明确的未实现原因与路线图阶段。
+ * 注册 Web 与各小程序 target；
+ * app-* 通过平台方言注册原生源码生成器。
  */
 export class TargetRegistry {
   private readonly targets = new Map<TargetType, BuildTarget>();
@@ -18,6 +23,7 @@ export class TargetRegistry {
     this.register(mpWeixinTarget);
     this.register(mpAlipayTarget);
     this.register(mpBytedanceTarget);
+    this.register(mpXiaohongshuTarget);
     this.register(new AppTarget(IOS_DIALECT));
     this.register(new AppTarget(ANDROID_DIALECT));
     this.register(new AppTarget(HARMONY_DIALECT));

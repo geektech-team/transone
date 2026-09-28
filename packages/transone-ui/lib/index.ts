@@ -59,5 +59,8 @@ export type { TuEmptyProps } from './components/Empty';
 export { TuTabs } from './components/Tabs';
 export type { TuTabItem, TuTabsProps } from './components/Tabs';
 
+export { TuCarousel } from './components/Carousel';
+export type { TuCarouselProps } from './components/Carousel';
+
 export { TuNavbar } from './components/Navbar';
 export type { TuNavbarProps } from './components/Navbar';

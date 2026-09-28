@@ -43,6 +43,7 @@ describe('Target 抽象', () => {
       'mp-weixin',
       'mp-alipay',
       'mp-bytedance',
+      'mp-xiaohongshu',
       'app-ios',
       'app-android',
       'app-harmony',
@@ -55,8 +56,13 @@ describe('Target 抽象', () => {
     expect(target.type).toBe('web');
   });
 
-  it('三个小程序目标均应解析为 MpTarget（差异化 dialect）', () => {
-    for (const type of ['mp-weixin', 'mp-alipay', 'mp-bytedance'] as const) {
+  it('四个小程序目标均应解析为 MpTarget（差异化 dialect）', () => {
+    for (const type of [
+      'mp-weixin',
+      'mp-alipay',
+      'mp-bytedance',
+      'mp-xiaohongshu',
+    ] as const) {
       const target = targetRegistry.resolve(type);
       expect(target).toBeInstanceOf(MpTarget);
       expect(target.type).toBe(type);

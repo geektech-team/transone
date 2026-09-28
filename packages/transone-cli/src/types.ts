@@ -41,11 +41,11 @@ export interface ProxyOptions {
   rewrite?: (path: string) => string;
 }
 
-/** 微信小程序目标端配置（--target mp-weixin）。 */
+/** 小程序目标端通用配置（--target mp-*）。 */
 export interface MiniProgramConfig {
-  /** 小程序 appid；默认 "touristappid"（微信开发者工具测试号）。 */
+  /** 小程序 appid；默认 "touristappid"（平台开发工具测试号/占位 ID）。 */
   appId?: string;
-  /** 小程序产物目录；默认 dist/build/mp-weixin。 */
+  /** 小程序产物目录；默认 dist/build/{target}。 */
   outDir?: string;
   /** 全局导航栏标题；默认 "TransOne"。 */
   navigationBarTitleText?: string;
@@ -81,7 +81,7 @@ export interface ResolvedMiniProgramConfig {
   globalData?: Record<string, unknown>;
 }
 
-/** 按小程序平台分组的目标端配置：{ 'mp-weixin': {...}, 'mp-alipay': {...} }。 */
+/** 按小程序平台分组的目标端配置：{ 'mp-weixin': {...}, 'mp-xiaohongshu': {...} }。 */
 export type MiniProgramConfigMap = Partial<Record<MpTargetType, MiniProgramConfig>>;
 
 /**
@@ -142,7 +142,7 @@ export interface UserConfig {
   server?: ServerConfig;
   build?: BuildConfig;
   library?: LibraryConfig;
-  /** 小程序目标端配置：单一配置（作用于所有 mp 目标）或按平台分组（'mp-weixin' / 'mp-alipay' / 'mp-bytedance'）。 */
+  /** 小程序目标端配置：单一配置（作用于所有 mp 目标）或按平台分组（键为 mp-* target）。 */
   mp?: UserMiniProgramConfig;
   /** 原生 App 目标配置：扁平配置或按 app-* 平台分组。 */
   app?: UserAppConfig;
@@ -190,7 +190,7 @@ export interface ResolvedConfig {
     directoryPages: boolean;
   };
   library?: ResolvedLibraryConfig;
-  /** 微信小程序目标端配置（--target mp-weixin）。 */
+  /** 小程序目标端配置（仅 --target mp-* 时存在）。 */
   mp?: ResolvedMiniProgramConfig;
   /** 原生 App 目标配置（仅 --target app-* 时存在）。 */
   app?: ResolvedAppConfig;

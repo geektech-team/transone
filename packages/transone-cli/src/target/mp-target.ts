@@ -4,6 +4,7 @@ import {
   MP_ALIPAY_DIALECT,
   MP_BYTEDANCE_DIALECT,
   MP_WEIXIN_DIALECT,
+  MP_XIAOHONGSHU_DIALECT,
   type MpDialect,
 } from '../mp/dialect';
 
@@ -48,3 +49,4 @@ export class MpTarget implements BuildTarget {
 export const mpWeixinTarget = new MpTarget(MP_WEIXIN_DIALECT);
 export const mpAlipayTarget = new MpTarget(MP_ALIPAY_DIALECT);
 export const mpBytedanceTarget = new MpTarget(MP_BYTEDANCE_DIALECT);
+export const mpXiaohongshuTarget = new MpTarget(MP_XIAOHONGSHU_DIALECT);

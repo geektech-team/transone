@@ -4,13 +4,13 @@
 
 Cross-platform UI component library: **one TypeScript source** statically compiled by [`transone-cli`](https://www.npmjs.com/package/transone-cli) into Web and mini-program (WeChat / Alipay / ByteDance) native output.
 
-17 controlled components in five groups:
+18 controlled components in five groups:
 
 - **Basic**: `TuButton` — button with type / size / loading / plain / round variants
 - **Feedback**: `TuToast` (top / center / bottom toast), `TuModal` (confirm dialog), `TuActionSheet` (bottom action sheet)
 - **Form**: `TuCheckbox` (custom checkbox), `TuRadio` (custom radio), `TuSearchBar` (search bar), `TuInput` (input), `TuSwitch` (switch)
 - **Display**: `TuBadge` (badge, renders `max+` beyond the cap), `TuCell` (cell), `TuEmpty` (empty state), `TuTag` (tag), `TuProgress` (progress bar)
-- **Navigation**: `TuTabs` (tabs), `TuNavbar` (navbar), `TuPopup` (top / right / bottom / left popup)
+- **Navigation**: `TuTabs` (tabs), `TuCarousel` (carousel), `TuNavbar` (navbar), `TuPopup` (top / right / bottom / left popup)
 
 All components are **fully controlled**: state lives in the parent; interactions are reported back through custom events (`click` / `change` / `input` / `close` ...) that the parent subscribes to via `emitters`. See the docs site (`docs/` or after `npm i transone-ui`) and the `playground/ui-demo` demo for API details and usage.
 
@@ -127,6 +127,20 @@ Events: `close`, reports `name`.
 | `size` | `small \| medium \| large` | `medium` | Size |
 
 Events: `input` / `change` / `focus` / `blur` / `confirm`. `input` and `change` report a normalized string (Web `e.target.value` and mini-program `e.detail.value` are unified); clearing the input reports `''`.
+
+### TuCarousel
+
+| Prop | Type | Default | Description |
+| --- | --- | --- | --- |
+| `active` | `number` | `0` | Current page index (controlled) |
+| `count` | `number` | `0` | Number of slotted pages; each direct child is one page |
+| `indicatorIndexes` | `number[]` | `[]` | Indicator indices (pass an array such as `[0, 1, 2]` for static mini-program templates) |
+| `indicators` | `boolean` | `true` | Show clickable page indicators |
+| `loop` | `boolean` | `false` | Wrap navigation between the first and last page |
+| `swipeThreshold` | `number` | `40` | Minimum swipe distance in px |
+| `children` | `Array<VNode \| string>` | — | Page content (slot); each child is one page |
+
+Event: `change`, reports the target page index. Swiping or tapping an indicator only emits the event; the parent updates `active` to change pages. Each page root must use the `tu-carousel__slide` class and fit the container width. Static mini-program templates cannot create an array from a numeric count; pass `indicatorIndexes` from parent state (not as an array literal prop) when indicators are enabled.
 
 ### TuPopup
 

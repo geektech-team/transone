@@ -25,5 +25,11 @@ export { TARGET_TYPES, MP_TARGET_TYPES, isTargetType, isMpTargetType } from './t
 export type { BuildTarget } from './target/types';
 export { targetRegistry, TargetRegistry } from './target/registry';
 export { WebTarget } from './target/web-target';
-export { MpTarget, mpWeixinTarget, mpAlipayTarget, mpBytedanceTarget } from './target/mp-target';
+export {
+  MpTarget,
+  mpWeixinTarget,
+  mpAlipayTarget,
+  mpBytedanceTarget,
+  mpXiaohongshuTarget,
+} from './target/mp-target';
 export { PlaceholderTarget } from './target/placeholder-target';

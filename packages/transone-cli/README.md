@@ -23,7 +23,7 @@ Usage:
   transone dev [--host <host>] [--port <port>] [--base <path>] [--no-watch]
   transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]
 
-Targets: web, mp-weixin, mp-alipay, mp-bytedance, app-ios, app-android, app-harmony (default: web)
+Targets: web, mp-weixin, mp-alipay, mp-bytedance, mp-xiaohongshu, app-ios, app-android, app-harmony (default: web)
 ```
 
 ### `transone create`
@@ -43,13 +43,14 @@ transone build --target web           # H5 site / SPA
 transone build --target mp-weixin     # WeChat mini-program project (WXML/WXSS/JS)
 transone build --target mp-alipay     # Alipay mini-program project (AXML/ACSS)
 transone build --target mp-bytedance  # ByteDance mini-program project (TTML/TTSS)
+transone build --target mp-xiaohongshu # Xiaohongshu mini-program project (XHSML/CSS)
 ```
 
 - `--out-dir` overrides the output directory.
 - `--base` sets the deployment base path (e.g. a GitHub Pages sub-path).
 - `--library` builds in library mode (no page entry required).
 
-Unimplemented targets fail fast at compile time with a clear error pointing to the corresponding roadmap stage.
+The iOS, Android, and Harmony native app targets are implemented. A generated project should still be opened in its platform IDE for runtime/device validation.
 
 ## Targets
 
@@ -59,7 +60,8 @@ Unimplemented targets fail fast at compile time with a clear error pointing to t
 | `mp-weixin` | Native WeChat mini-program project | Compile-time static conversion (WXML / WXSS / JS) | Implemented |
 | `mp-alipay` | Native Alipay mini-program project | Compile-time static conversion (AXML / ACSS) | Implemented |
 | `mp-bytedance` | Native ByteDance mini-program project | Compile-time static conversion (TTML / TTSS) | Implemented |
-| `app-ios` / `app-android` / `app-harmony` | Native app | TBD | Roadmap |
+| `mp-xiaohongshu` | Native Xiaohongshu Mini Program (not Mini Widget) | Compile-time static conversion (XHSML / CSS) | Implemented |
+| `app-ios` / `app-android` / `app-harmony` | Native app (SwiftUI / Jetpack Compose / ArkUI) | Compile-time source generation | Implemented |
 
 Mini-program builds emit a complete native project: `app.json` / `app.js` / app style file / project config, plus `pages/<route>/<name>.*` and `components/<tag>/<tag>.*`. Platform differences (template syntax, style language, event binding, lifecycle mapping) are handled by the `MpDialect` abstraction.
 
@@ -93,13 +95,21 @@ export default defineConfig({
 });
 ```
 
-The `mp` field accepts either a single `MiniProgramConfig` (applies to every mini-program target; recommended for WeChat-only apps) or a per-platform map like `{ 'mp-weixin': {...}, 'mp-alipay': {...} }` — only the config for the current target is used.
+The `mp` field accepts either a single `MiniProgramConfig` (applies to every mini-program target) or a per-platform map like `{ 'mp-weixin': {...}, 'mp-alipay': {...}, 'mp-xiaohongshu': {...} }` — only the config for the current target is used. Xiaohongshu uses the default placeholder app ID unless you set its own `appId`.
+
+Generate the Counter playground project for Xiaohongshu with:
+
+```bash
+bun run --cwd playground/counter build:xiaohongshu
+```
+
+The output is `playground/counter/dist/build/mp-xiaohongshu`.
 
 ## How the compiler works
 
 1. Loads the project config and resolves pages from the entry file.
 2. For Web: renders directly with the browser runtime (H5 site / SPA).
-3. For mini-program targets: statically analyzes the root component class of each page, then compiles the component tree into native files — WXML/JS (WeChat), AXML/ACSS (Alipay), TTML/TTSS (ByteDance) — including styles, template bindings, event methods, and data-state mapping. The generated code is a standalone native project with no TransOne runtime.
+3. For mini-program targets: statically analyzes the root component class of each page, then compiles the component tree into native files — WXML/WXSS (WeChat), AXML/ACSS (Alipay), TTML/TTSS (ByteDance), and XHSML/CSS (Xiaohongshu) — including styles, template bindings, event methods, and data-state mapping. The generated code is a standalone native project with no TransOne runtime.
 4. Library components are resolved through the `"source"` field of each package's `package.json` (see `transone-ui`).
 
 ## Extending a new target

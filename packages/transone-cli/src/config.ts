@@ -103,9 +103,8 @@ export async function resolveConfig(
         allowRoot: true,
       })
     : pages;
-  // --target mp-weixin 时启用小程序构建；config.mp 缺失则走默认值
-  // （touristappid / dist/build/mp-weixin / pages 复用 config.pages）。
-  const mpEnabled = config.mp !== undefined || target === 'mp-weixin';
+  // 任一 --target mp-* 都启用小程序构建；config.mp 缺失则走平台默认值。
+  const mpEnabled = config.mp !== undefined || isMpTargetType(target);
   const appConfig = pickAppConfig(config.app, target);
 
   return {
@@ -190,10 +189,11 @@ const MP_DEFAULT_OUT_DIRS: Record<string, string> = {
   'mp-weixin': 'dist/build/mp-weixin',
   'mp-alipay': 'dist/build/mp-alipay',
   'mp-bytedance': 'dist/build/mp-bytedance',
+  'mp-xiaohongshu': 'dist/build/mp-xiaohongshu',
 };
 
 /**
- * mp 字段是否为按平台分组写法（含 'mp-weixin' / 'mp-alipay' / 'mp-bytedance' 任一键）。
+ * mp 字段是否为按平台分组写法（含任一 MP_TARGET_TYPES 平台键）。
  * 扁平配置的字段均为驼峰命名，与平台键不冲突，可安全区分。
  */
 function isMpConfigMap(value: unknown): value is MiniProgramConfigMap {
@@ -279,7 +279,7 @@ function resolveTarget(target: unknown): ResolvedConfig['target'] {
   }
   throw new Error(
     `Unknown build target "${String(target)}". ` +
-      'Available targets: web, mp-weixin, mp-alipay, mp-bytedance, ' +
+      'Available targets: web, mp-weixin, mp-alipay, mp-bytedance, mp-xiaohongshu, ' +
       'app-ios, app-android, app-harmony.'
   );
 }

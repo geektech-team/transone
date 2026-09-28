@@ -4,12 +4,12 @@
 
 跨端 UI 组件库：**一份 TypeScript 源码**，经 [transone-cli](https://www.npmjs.com/package/transone-cli) 静态编译为 Web 与小程序（微信 / 阿里 / 字节）原生产物。
 
-组件（17 个，四类）：
+组件（18 个，四类）：
 
 - **反馈**：`TuToast`（top / center / bottom 轻提示）、`TuModal`（确认弹窗）、`TuActionSheet`（底部动作面板）
 - **表单**：`TuCheckbox`（自绘复选框）、`TuRadio`（自绘单选框）、`TuSearchBar`（搜索栏）、`TuInput`（输入框）、`TuSwitch`（开关）
 - **展示**：`TuBadge`（徽标，超 max 显示 max+）、`TuCell`（单元格）、`TuEmpty`（空状态）、`TuTag`（标签）、`TuProgress`（进度条）
-- **导航**：`TuTabs`（标签页）、`TuNavbar`（导航栏）、`TuPopup`（top / right / bottom / left 四向弹出）
+- **导航**：`TuTabs`（标签页）、`TuCarousel`（走马灯）、`TuNavbar`（导航栏）、`TuPopup`（top / right / bottom / left 四向弹出）
 
 全部组件为受控组件，API 与用法见 docs 站（`docs/` 或 `npm i transone-ui` 后查看）与 `playground/ui-demo` 演示。
 
@@ -128,6 +128,20 @@ class MyPage extends Component {
 | `size` | `small \| medium \| large` | `medium` | 尺寸 |
 
 事件：`input` / `change` / `focus` / `blur` / `confirm`。`input` 与 `change` 回传字符串值（已归一化 Web 的 `e.target.value` 与小程序 `e.detail.value`）；点击清空按钮回传 `''`。
+
+### TuCarousel
+
+| 属性 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `active` | `number` | `0` | 当前页索引（受控） |
+| `count` | `number` | `0` | 插槽中的页数；每个直接子节点对应一页 |
+| `indicatorIndexes` | `number[]` | `[]` | 指示点索引数组（小程序端循环渲染需要显式传入，如 `[0, 1, 2]`） |
+| `indicators` | `boolean` | `true` | 是否显示并允许点击页码指示点 |
+| `loop` | `boolean` | `false` | 是否允许首尾循环切换 |
+| `swipeThreshold` | `number` | `40` | 触发切页的最小滑动距离（px） |
+| `children` | `Array<VNode \| string>` | — | 各页内容（插槽）；每个子节点是一页 |
+
+事件：`change`，回传目标页索引。滑动或点击指示点只发出事件，父组件更新 `active` 后才切换页面。每页根节点需带 `tu-carousel__slide` 类并适配容器宽度。小程序静态模板不能在组件内按数字生成数组；需要指示点时，请从父组件状态传入与页数对应的 `indicatorIndexes` 数组（不要直接用属性字面量传数组）。
 
 ### TuPopup
 
