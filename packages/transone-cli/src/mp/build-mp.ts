@@ -86,8 +86,8 @@ export async function buildMiniProgram(
           ...mp.window,
         },
         ...(mp.tabBar !== undefined ? { tabBar: mp.tabBar } : {}),
-        ...mp.appExtra,
         ...dialect.appJsonExtras(),
+        ...mp.appExtra,
       },
       null,
       2

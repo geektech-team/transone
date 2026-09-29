@@ -106,6 +106,7 @@ describe('mp build', () => {
     const appJson = JSON.parse(readFileSync(join(out, 'app.json'), 'utf8'));
     expect(appJson.pages).toEqual(['pages/index/index', 'pages/about/about']);
     expect(appJson.window.navigationBarTitleText).toBe('MP App');
+    expect(appJson.lazyCodeLoading).toBe('requiredComponents');
 
     // project.config.json：appid
     const projectConfig = JSON.parse(
@@ -450,5 +451,15 @@ it('generated mini-program requests use platform host and explicit baseURL overr
       if (previousApp === undefined) delete globals.getApp; else globals.getApp = previousApp;
       if (previousWx === undefined) delete globals.wx; else globals.wx = previousWx;
     }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+it('allows explicit lazyCodeLoading override for Weixin', async () => {
+  const root = makeRoot();
+  try {
+    const result = await build({ root, target: 'mp-weixin', config: {
+      mp: { appExtra: { lazyCodeLoading: '' } },
+    } });
+    expect(JSON.parse(readFileSync(join(result.outDir, 'app.json'), 'utf8')).lazyCodeLoading).toBe('');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

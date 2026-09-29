@@ -172,3 +172,5 @@ export default defineConfig({
 
 Native app builds write `{ host }` to `transone.config.json` in the platform resource directory.
 Native request compilation is not yet supported; this file is configuration for future integration.
+
+Weixin builds default to `lazyCodeLoading: "requiredComponents"` in `app.json` (component injection on demand). Override it through `mp.appExtra.lazyCodeLoading` or the platform-specific `appExtra`.

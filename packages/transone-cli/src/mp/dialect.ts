@@ -83,6 +83,7 @@ export const MP_WEIXIN_DIALECT: MpDialect = {
     backgroundTextStyle: 'light',
   }),
   appJsonExtras: () => ({
+    lazyCodeLoading: 'requiredComponents',
     style: 'v2',
     sitemapLocation: 'sitemap.json',
   }),
