@@ -84,12 +84,8 @@ export interface ResolvedMiniProgramConfig {
 /** 按小程序平台分组的目标端配置：{ 'mp-weixin': {...}, 'mp-xiaohongshu': {...} }。 */
 export type MiniProgramConfigMap = Partial<Record<MpTargetType, MiniProgramConfig>>;
 
-/**
- * mp 字段的两种写法：
- * - 单一 `MiniProgramConfig`：作用于任意小程序目标（向后兼容，微信单端推荐）；
- * - `MiniProgramConfigMap`：按平台分组，构建时只取当前 target 对应的那份。
- */
-export type UserMiniProgramConfig = MiniProgramConfig | MiniProgramConfigMap;
+/** 公共字段直接放在 mp 下；平台配置递归覆盖公共字段，数组整体替换。 */
+export type UserMiniProgramConfig = MiniProgramConfig & MiniProgramConfigMap;
 
 export interface ServerConfig {
   host?: string;
@@ -142,7 +138,7 @@ export interface UserConfig {
   server?: ServerConfig;
   build?: BuildConfig;
   library?: LibraryConfig;
-  /** 小程序目标端配置：单一配置（作用于所有 mp 目标）或按平台分组（键为 mp-* target）。 */
+  /** 小程序公共配置与平台覆盖配置（键为 mp-* target）。 */
   mp?: UserMiniProgramConfig;
   /** 原生 App 目标配置：扁平配置或按 app-* 平台分组。 */
   app?: UserAppConfig;

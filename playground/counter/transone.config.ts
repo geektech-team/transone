@@ -12,13 +12,9 @@ export default defineConfig({
     outDir: 'dist/web',
   },
   mp: {
-    // 按平台分组：每个 --target mp-* 只读取对应平台配置
+    navigationBarTitleText: 'TransOne 演练',
     'mp-weixin': {
       appId: 'wx5ce4dae29058e087',
-      navigationBarTitleText: 'TransOne 演练',
-    },
-    'mp-xiaohongshu': {
-      navigationBarTitleText: 'TransOne 演练',
     },
   },
   app: {

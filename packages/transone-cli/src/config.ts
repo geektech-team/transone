@@ -14,7 +14,6 @@ import type {
   AppConfigMap,
   LibraryConfig,
   MiniProgramConfig,
-  MiniProgramConfigMap,
   ProxyOptions,
   ResolveConfigOptions,
   ResolvedConfig,
@@ -94,8 +93,7 @@ export async function resolveConfig(
   }
   const pages = await resolvePages(root, entry, config.pages);
   const target = resolveTarget(options.target);
-  // 按当前 target 挑选小程序配置：扁平配置对所有 mp 目标生效，
-  // 按平台分组（mp['mp-weixin'] 等）时只取对应平台。
+  // 公共小程序配置与当前平台配置合并，平台字段优先。
   const mpConfig = pickMpConfig(config.mp, target);
   const mpPages = mpConfig?.pages
     ? await resolvePages(root, entry, mpConfig.pages, {
@@ -192,18 +190,7 @@ const MP_DEFAULT_OUT_DIRS: Record<string, string> = {
   'mp-xiaohongshu': 'dist/build/mp-xiaohongshu',
 };
 
-/**
- * mp 字段是否为按平台分组写法（含任一 MP_TARGET_TYPES 平台键）。
- * 扁平配置的字段均为驼峰命名，与平台键不冲突，可安全区分。
- */
-function isMpConfigMap(value: unknown): value is MiniProgramConfigMap {
-  return (
-    isRecord(value) &&
-    MP_TARGET_TYPES.some((platform) => platform in value)
-  );
-}
-
-/** 取当前 target 对应的小程序配置：扁平配置对所有 mp 目标生效；分组配置只取对应平台。 */
+/** 公共配置先应用，再递归合并当前平台配置；数组和其他值整体替换。 */
 function pickMpConfig(
   mp: UserMiniProgramConfig | undefined,
   target: TargetType
@@ -211,10 +198,36 @@ function pickMpConfig(
   if (mp === undefined) {
     return undefined;
   }
-  if (isMpConfigMap(mp)) {
-    return isMpTargetType(target) ? mp[target] : undefined;
+  const common = Object.fromEntries(
+    Object.entries(mp).filter(
+      ([key]) => !MP_TARGET_TYPES.includes(key as typeof MP_TARGET_TYPES[number])
+    )
+  );
+  const platform = isMpTargetType(target) ? mp[target] : undefined;
+  return mergeMpRecords(common, { ...platform });
+}
+
+function mergeMpRecords(
+  common: Record<string, unknown>,
+  overrides: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...common };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) continue;
+    const previous = Object.prototype.hasOwnProperty.call(common, key)
+      ? common[key]
+      : undefined;
+    const next = isRecord(previous) && isRecord(value)
+      ? mergeMpRecords(previous, value)
+      : value;
+    Object.defineProperty(merged, key, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
-  return mp;
+  return merged;
 }
 
 function resolveMiniProgram(
@@ -449,23 +462,17 @@ function validateSingleAppConfig(
   }
 }
 
-/**
- * 校验 mp 字段：扁平单一配置，或按平台分组（每项都是一个平台配置）。
- */
+/** 公共字段和各平台字段分别校验，避免平台键使公共字段绕过校验。 */
 function validateMpConfig(
   mp: unknown
 ): asserts mp is UserMiniProgramConfig {
   assertRecord(mp, 'Config mp');
-  if (isMpConfigMap(mp)) {
-    for (const platform of MP_TARGET_TYPES) {
-      const platformConfig = mp[platform];
-      if (platformConfig !== undefined) {
-        validateMiniProgramConfig(platformConfig, `Config mp.${platform}`);
-      }
-    }
-    return;
-  }
   validateMiniProgramConfig(mp, 'Config mp');
+  for (const platform of MP_TARGET_TYPES) {
+    if (mp[platform] !== undefined) {
+      validateMiniProgramConfig(mp[platform], `Config mp.${platform}`);
+    }
+  }
 }
 
 function validateMiniProgramConfig(

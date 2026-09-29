@@ -9,9 +9,9 @@ export default defineConfig({
     outDir: 'dist/web',
   },
   mp: {
+    navigationBarTitleText: 'TransOne 图表 Demo',
     'mp-weixin': {
       appId: 'wx5ce4dae29058e087',
-      navigationBarTitleText: 'TransOne 图表 Demo',
     },
   },
 });

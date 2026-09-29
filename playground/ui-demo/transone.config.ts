@@ -10,7 +10,9 @@ export default defineConfig({
     outDir: 'dist/web',
   },
   mp: {
-    appId: 'wx5ce4dae29058e087',
     navigationBarTitleText: 'transone-ui 组件演示',
+    'mp-weixin': {
+      appId: 'wx5ce4dae29058e087',
+    },
   },
 });

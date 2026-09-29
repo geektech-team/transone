@@ -420,17 +420,19 @@ export const cliBuildPage: DocPage = {
     paragraph(
       '小程序目标把同一入口编译为原生工程：app.json / app.js / 页面 json + js + wxml + wxss（各端方言后缀不同），并用',
       inlineCode('MiniProgramConfig'),
-      ' 控制细节。mp 字段支持两种写法：单一配置对所有小程序目标生效；按平台分组时只对当前 target 生效，',
+      ' 控制细节。公共字段直接放在 mp 下，各平台配置覆盖公共配置；对象递归合并，数组整体替换，未配置的平台沿用公共配置。',
       inlineCode('--target mp-alipay'),
-      ' 即取',
+      ' 会将公共配置与',
       inlineCode("mp['mp-alipay']"),
-      '。',
+      ' 合并。原有扁平配置和纯平台分组写法继续兼容。',
     ),
     codeBlock(
       'ts',
-      `// 按平台分组：一套配置管三端，各端独立 appId / outDir / 标题
+      `// 公共配置 + 平台覆盖：各端独立 appId / 标题
 export default defineConfig({
   mp: {
+    lengthUnit: 'rpx',
+    window: { navigationBarBackgroundColor: '#ffffff' },
     'mp-weixin': { appId: 'wx123456', navigationBarTitleText: '微信端' },
     'mp-alipay': { appId: '2024000000000000', navigationBarTitleText: '支付宝端' },
     'mp-bytedance': { appId: 'tt123456', navigationBarTitleText: '抖音端' },

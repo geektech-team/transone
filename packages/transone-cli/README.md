@@ -87,15 +87,16 @@ export default defineConfig({
     directoryPages: false,
   },
   mp: {
-    appId: 'touristappid',         // WeChat dev-tool test id by default
     navigationBarTitleText: 'TransOne',
     lengthUnit: 'px',              // or 'rpx' (values converted at 1px = 2rpx)
     // pages, window, tabBar, appExtra, pageExtra, globalData, publicDir ...
+    'mp-weixin': { appId: 'wx123456' },
+    'mp-alipay': { appId: '2024000000000000', navigationBarTitleText: 'Alipay' },
   },
 });
 ```
 
-The `mp` field accepts either a single `MiniProgramConfig` (applies to every mini-program target) or a per-platform map like `{ 'mp-weixin': {...}, 'mp-alipay': {...}, 'mp-xiaohongshu': {...} }` — only the config for the current target is used. Xiaohongshu uses the default placeholder app ID unless you set its own `appId`.
+Common mini-program fields live directly under `mp`; platform-specific fields live under keys such as `'mp-weixin'` or `'mp-alipay'`. The current platform overrides common fields: objects merge recursively, arrays replace as a whole, and undefined fields inherit common values. Platforms without overrides use the common configuration. Existing flat and platform-only configurations remain supported. The default app ID is `touristappid` unless configured.
 
 Generate the Counter playground project for Xiaohongshu with:
 
