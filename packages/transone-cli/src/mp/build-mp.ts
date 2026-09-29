@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { ResolvedConfig, BuildResult } from '../types';
 import type { MpDialect } from './dialect';
@@ -93,11 +94,18 @@ export async function buildMiniProgram(
     )}\n`
   );
 
+  const requestBundle = await Bun.build({
+    entrypoints: [fileURLToPath(import.meta.resolve('transone/request'))],
+    target: 'browser', format: 'cjs', minify: false,
+  });
+  if (!requestBundle.success) throw new Error(`Mini program request runtime build failed: ${requestBundle.logs.join('\n')}`);
+  await write('transone-request.js', await requestBundle.outputs[0].text());
   await write(
     'app.js',
-    `App(${JSON.stringify(
-      mp.globalData !== undefined ? { globalData: mp.globalData } : {}
-    )});\n`
+    `App({__transoneRequest: require('./transone-request.js'), ...${JSON.stringify({
+      ...(mp.host !== undefined ? { __transoneConfig: { host: mp.host } } : {}),
+      ...(mp.globalData !== undefined ? { globalData: mp.globalData } : {}),
+    })}});\n`
   );
   if (dialect.sitemap) {
     await write(

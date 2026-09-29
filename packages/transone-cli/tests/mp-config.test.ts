@@ -85,3 +85,21 @@ it('inherits common output directory unless the platform overrides it', async ()
   expect(weixin.mp?.outDir).toBe(join(root, 'weixin'));
   expect(alipay.mp?.outDir).toBe(join(root, 'common'));
 });
+
+it('resolves common and platform API hosts for mp and app', async () => {
+  const root = makeRoot();
+  const mp = await resolveConfig({ root, target: 'mp-weixin', config: {
+    mp: { host: 'https://common.test', 'mp-weixin': { host: 'https://wx.test' } },
+  } });
+  expect(mp.mp?.host).toBe('https://wx.test');
+  const app = await resolveConfig({ root, target: 'app-ios', config: {
+    app: { host: 'https://common.test', 'app-ios': { host: 'https://ios.test' } },
+  } });
+  expect(app.app?.host).toBe('https://ios.test');
+});
+
+it.each(['mp', 'app'] as const)('rejects invalid %s API hosts', async (field) => {
+  await expect(resolveConfig({ root: makeRoot(), config: {
+    [field]: { host: 'ftp://example.com' },
+  } })).rejects.toThrow(`Config ${field}.host must use http or https`);
+});

@@ -117,7 +117,21 @@ function compileInlineModule(
 ): string {
   const { ts } = context;
   const kept: tsTypes.Statement[] = [];
+  const requestImports: string[] = [];
   for (const statement of source.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text === 'transone/request' && !statement.importClause?.isTypeOnly) {
+      const clause = statement.importClause;
+      if (clause?.name) requestImports.push(`const ${clause.name.text} = getApp().__transoneRequest.default;`);
+      const bindings = clause?.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings)) {
+        requestImports.push(`const ${bindings.name.text} = getApp().__transoneRequest;`);
+      } else if (bindings && ts.isNamedImports(bindings)) {
+        for (const item of bindings.elements) {
+          if (!item.isTypeOnly) requestImports.push(`const ${item.name.text} = getApp().__transoneRequest[${JSON.stringify(item.propertyName?.text ?? item.name.text)}];`);
+        }
+      }
+    }
     if (
       ts.isImportDeclaration(statement) ||
       ts.isExportDeclaration(statement) ||
@@ -125,6 +139,22 @@ function compileInlineModule(
       ts.isInterfaceDeclaration(statement) ||
       ts.isTypeAliasDeclaration(statement)
     ) {
+      continue;
+    }
+    // Component classes and createApp calls are compiled into Page/Component elsewhere.
+    if (ts.isClassDeclaration(statement) && statement.heritageClauses?.some((clause) =>
+      clause.types.some((type) => ts.isIdentifier(type.expression)
+        && (type.expression.text === 'Component' || type.expression.text.endsWith('Component')))
+    )) continue;
+    if (ts.isVariableStatement(statement)) {
+      const declarations = statement.declarationList.declarations.filter((declaration) =>
+        !(declaration.initializer && ts.isCallExpression(declaration.initializer)
+          && ts.isIdentifier(declaration.initializer.expression)
+          && declaration.initializer.expression.text === 'createApp')
+      );
+      if (declarations.length === 0) continue;
+      kept.push(ts.factory.updateVariableStatement(statement, statement.modifiers,
+        ts.factory.updateVariableDeclarationList(statement.declarationList, declarations)));
       continue;
     }
     kept.push(statement);
@@ -144,5 +174,5 @@ function compileInlineModule(
     reportDiagnostics: false,
   });
   // 顶层 export 前缀：内联进产物后不再是模块边界，直接剥离
-  return transpiled.outputText.replace(/^export\s+/gm, '').trim();
+  return [...requestImports, transpiled.outputText.replace(/^export\s+/gm, '').trim()].join('\n');
 }

@@ -334,6 +334,19 @@ function visit(
     !state.locals.has(node.text) &&
     state.consts.has(node.text)
   ) {
+    const initializer = state.consts.get(node.text)!;
+    if (ts.isCallExpression(initializer) && ts.isIdentifier(initializer.expression)) {
+      const factoryName = initializer.expression.text;
+      const isRequestFactory = classSource.source.statements.some((statement) =>
+        ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+        && statement.moduleSpecifier.text === 'transone/request'
+        && statement.importClause?.namedBindings
+        && ts.isNamedImports(statement.importClause.namedBindings)
+        && statement.importClause.namedBindings.elements.some((item) =>
+          item.name.text === factoryName && (item.propertyName?.text ?? item.name.text) === 'createRequest')
+      );
+      if (isRequestFactory) return node;
+    }
     const folded = foldExpression(
       ts,
       state.consts.get(node.text)!,

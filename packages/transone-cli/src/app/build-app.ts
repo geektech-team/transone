@@ -12,6 +12,10 @@ export async function buildNativeApp(config: ResolvedConfig, dialect: NativeDial
   if (entries.length !== 1) throw nativeError(config.entry, '首期原生 App 只支持一个页面');
   const screen = await analyzeNativeScreen(entries[0]);
   const files = dialect.generateProject(screen, config.app);
+  if (config.app.host !== undefined) {
+    files[`${dialect.resourceDirectory}/transone.config.json`] =
+      `${JSON.stringify({ host: config.app.host }, null, 2)}\n`;
+  }
   await rm(config.app.outDir, { recursive: true, force: true });
   const assetsBuilt: string[] = [];
   for (const [relative, content] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {

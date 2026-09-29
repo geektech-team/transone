@@ -439,7 +439,9 @@ export default defineConfig({
   },
 });`,
     ),
+    paragraph('mp.host 配置默认接口地址（完整 http/https URL），平台 host 覆盖公共 host。transone/request 的实例或单次 baseURL 优先，绝对请求 URL 不受影响。app.host 同样支持平台覆盖，目前仅写入生成工程资源目录的 transone.config.json，原生 App 暂未支持请求代码编译。'),
     apiTable('MiniProgramConfig 关键字段', [
+      { name: 'host', type: 'string', description: '小程序默认接口基础地址，平台配置可覆盖。' },
       { name: 'appId', type: 'string', description: '小程序 appid，默认 touristappid（微信开发者工具测试号）。' },
       { name: 'outDir', type: 'string', description: '小程序产物目录，默认 dist/build/mp-<target>。' },
       { name: 'pages', type: 'Record<string, string>', description: '小程序专用页面路由，默认复用 config.pages。' },

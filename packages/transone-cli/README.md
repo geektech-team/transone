@@ -87,6 +87,7 @@ export default defineConfig({
     directoryPages: false,
   },
   mp: {
+    host: 'https://api.example.com', // default request baseURL
     navigationBarTitleText: 'TransOne',
     lengthUnit: 'px',              // or 'rpx' (values converted at 1px = 2rpx)
     // pages, window, tabBar, appExtra, pageExtra, globalData, publicDir ...
@@ -147,3 +148,27 @@ bun run lint
 ## License
 
 MIT
+
+### API host for mini-programs and native apps
+
+Set `mp.host` or `app.host` in `transone.config.ts` (an absolute HTTP/HTTPS URL).
+`mp['mp-weixin'].host` and `app['app-ios'].host` override their common host.
+For mini-programs, `transone/request` uses this host as its default `baseURL`;
+instance and per-request `baseURL` take priority, and absolute request URLs keep their own address.
+With no host configured, request behavior remains unchanged.
+
+```ts
+export default defineConfig({
+  mp: {
+    host: 'https://api.example.com',
+    'mp-weixin': { host: 'https://wx-api.example.com' },
+  },
+  app: {
+    host: 'https://api.example.com',
+    'app-ios': { host: 'https://ios-api.example.com' },
+  },
+});
+```
+
+Native app builds write `{ host }` to `transone.config.json` in the platform resource directory.
+Native request compilation is not yet supported; this file is configuration for future integration.

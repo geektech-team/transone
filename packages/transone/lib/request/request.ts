@@ -177,7 +177,14 @@ export class Request {
       });
     }
 
+    const runtime = globalThis as unknown as {
+      getApp?: () => { __transoneConfig?: { host?: string } } | undefined;
+    };
+    const host = typeof runtime.getApp === 'function'
+      ? runtime.getApp()?.__transoneConfig?.host
+      : undefined;
     const merged: RequestConfig = {
+      ...(host !== undefined ? { baseURL: host } : {}),
       ...this.instanceDefaults,
       ...config,
       headers: mergeHeaders(this.instanceDefaults.headers, config.headers),

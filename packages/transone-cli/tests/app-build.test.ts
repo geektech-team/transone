@@ -142,3 +142,17 @@ describe('native app build', () => {
     expect(readFileSync(output, 'utf8')).toBe(before);
   });
 });
+
+it.each([
+  ['app-ios', 'TransOneApp/Assets'],
+  ['app-android', 'app/src/main/assets'],
+  ['app-harmony', 'entry/src/main/resources/rawfile'],
+] as const)('writes host into %s generated resources', async (target, resources) => {
+  const root = makeRoot();
+  writeFileSync(join(root, 'src/main.ts'), `export class App {
+    render() { return { tag: 'main', children: [] }; }
+  }`);
+  const result = await build({ root, target, config: { app: { host: 'https://api.test' } } });
+  expect(JSON.parse(readFileSync(join(result.outDir, resources, 'transone.config.json'), 'utf8')))
+    .toEqual({ host: 'https://api.test' });
+});

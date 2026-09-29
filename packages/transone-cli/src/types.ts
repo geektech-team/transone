@@ -12,6 +12,8 @@ export {
 
 /** 原生 App 目标通用配置。 */
 export interface AppConfig {
+  /** 接口请求基础地址（http/https）；平台配置可覆盖。 */
+  host?: string;
   appName?: string;
   bundleId?: string;
   outDir?: string;
@@ -24,9 +26,11 @@ export interface AppConfig {
 /** 按原生 App 平台分组的配置。 */
 export type AppConfigMap = Partial<Record<AppTargetType, AppConfig>>;
 
-export type UserAppConfig = AppConfig | AppConfigMap;
+export type UserAppConfig = AppConfig | (AppConfigMap & Pick<AppConfig, 'host'>);
 
 export interface ResolvedAppConfig {
+  /** 接口请求基础地址（http/https）；平台配置可覆盖。 */
+  host?: string;
   appName: string;
   bundleId: string;
   outDir: string;
@@ -43,6 +47,8 @@ export interface ProxyOptions {
 
 /** 小程序目标端通用配置（--target mp-*）。 */
 export interface MiniProgramConfig {
+  /** 接口请求基础地址（http/https）；平台配置可覆盖。 */
+  host?: string;
   /** 小程序 appid；默认 "touristappid"（平台开发工具测试号/占位 ID）。 */
   appId?: string;
   /** 小程序产物目录；默认 dist/build/{target}。 */
@@ -68,6 +74,8 @@ export interface MiniProgramConfig {
 }
 
 export interface ResolvedMiniProgramConfig {
+  /** 接口请求基础地址（http/https）；平台配置可覆盖。 */
+  host?: string;
   appId: string;
   outDir: string;
   navigationBarTitleText: string;

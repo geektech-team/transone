@@ -400,3 +400,55 @@ describe('mp build', () => {
   });
 
 });
+
+// Execute generated modules to verify host propagation through the real request runtime.
+it('generated mini-program requests use platform host and explicit baseURL overrides', async () => {
+  const root = makeRoot();
+  try {
+    const source = join(root, 'src/main.ts');
+    writeFileSync(source, `
+      import { Component, h, createApp } from '${frameworkEntryPath}';
+      import { createRequest as makeRequest } from 'transone/request';
+      const http = makeRequest();
+      export class App extends Component {
+        render() { return h('div', {}, [
+          h('button', { onClick: () => this.load() }, 'load'),
+          h('button', { onClick: () => this.explicit() }, 'explicit'),
+        ]); }
+        async load() { return http.get('/users'); }
+        async explicit() { return http.get('/users', { baseURL: 'https://explicit.test' }); }
+      }
+      export const app = createApp({ root: App });
+    `);
+    const result = await build({ root, target: 'mp-weixin', config: { mp: {
+      host: 'https://common.test', 'mp-weixin': { host: 'https://wx.test' },
+    } } });
+    let app: unknown;
+    let page: { load(): Promise<unknown>; explicit(): Promise<unknown> };
+    const runtime = await import(join(result.outDir, 'transone-request.js'));
+    new Function('App', 'require', readFileSync(join(result.outDir, 'app.js'), 'utf8'))(
+      (value: unknown) => { app = value; }, () => runtime,
+    );
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const previousApp = globals.getApp;
+    const previousWx = globals.wx;
+    const urls: string[] = [];
+    globals.getApp = () => app;
+    globals.wx = { request(options: { url: string; success(value: unknown): void }) {
+      urls.push(options.url);
+      options.success({ data: {}, statusCode: 200, header: {} });
+      return {};
+    } };
+    try {
+      new Function('getApp', 'Page', readFileSync(join(result.outDir, 'pages/index/index.js'), 'utf8'))(
+        () => app, (value: typeof page) => { page = value; },
+      );
+      await page!.load();
+      await page!.explicit();
+      expect(urls).toEqual(['https://wx.test/users', 'https://explicit.test/users']);
+    } finally {
+      if (previousApp === undefined) delete globals.getApp; else globals.getApp = previousApp;
+      if (previousWx === undefined) delete globals.wx; else globals.wx = previousWx;
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

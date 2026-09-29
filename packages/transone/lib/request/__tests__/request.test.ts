@@ -310,3 +310,19 @@ describe('RequestError', () => {
     expect(isRequestError(new Error('x'))).toBe(false);
   });
 });
+
+it('uses generated mini-program host as default while explicit baseURL wins', async () => {
+  const runtime = globalThis as unknown as { getApp?: () => unknown };
+  const previous = runtime.getApp;
+  runtime.getApp = () => ({ __transoneConfig: { host: 'https://mp.test' } });
+  try {
+    const http = createRequest({ adapter: mockAdapter(okResponse) });
+    expect((await http.get('/users')).config.baseURL).toBe('https://mp.test');
+    expect((await http.get('/users', { baseURL: '' })).config.baseURL).toBe('');
+    const explicit = createRequest({ baseURL: 'https://instance.test', adapter: mockAdapter(okResponse) });
+    expect((await explicit.get('/users')).config.baseURL).toBe('https://instance.test');
+  } finally {
+    if (previous) runtime.getApp = previous;
+    else delete runtime.getApp;
+  }
+});

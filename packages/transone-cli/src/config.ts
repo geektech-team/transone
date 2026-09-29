@@ -156,7 +156,8 @@ function pickAppConfig(
     return undefined;
   }
   if (isAppConfigMap(app)) {
-    return isAppTargetType(target) ? app[target] : undefined;
+    return { ...(app.host !== undefined ? { host: app.host } : {}),
+      ...(isAppTargetType(target) ? app[target] : {}) };
   }
   return app;
 }
@@ -169,6 +170,7 @@ async function resolveApp(
   fallbackPages: Record<string, string>
 ): Promise<ResolvedAppConfig> {
   return {
+    ...(app.host !== undefined ? { host: app.host } : {}),
     appName: app.appName ?? 'TransOne',
     bundleId: app.bundleId ?? 'com.transone.app',
     outDir: resolve(root, outDirOverride ?? app.outDir ?? `dist/build/${target}`),
@@ -238,6 +240,7 @@ function resolveMiniProgram(
   target: TargetType
 ): ResolvedMiniProgramConfig {
   return {
+    ...(mp.host !== undefined ? { host: mp.host } : {}),
     appId: mp.appId ?? 'touristappid',
     outDir: resolve(
       root,
@@ -432,6 +435,7 @@ function validateUserConfig(config: unknown): asserts config is UserConfig {
 
 function validateAppConfig(app: unknown): asserts app is UserAppConfig {
   assertRecord(app, 'Config app');
+  validateApiHost(app.host, 'Config app.host');
   if (isAppConfigMap(app)) {
     const flatKeys = ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir', 'pages'];
     if (flatKeys.some((key) => key in app)) {
@@ -452,6 +456,7 @@ function validateSingleAppConfig(
   label: string
 ): asserts app is AppConfig {
   assertRecord(app, label);
+  validateApiHost(app.host, `${label}.host`);
   for (const key of ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir'] as const) {
     if (app[key] !== undefined && typeof app[key] !== 'string') {
       throw new Error(`${label}.${key} must be a string`);
@@ -480,6 +485,7 @@ function validateMiniProgramConfig(
   label: string
 ): asserts mp is MiniProgramConfig {
   assertRecord(mp, label);
+  validateApiHost(mp.host, `${label}.host`);
 
   for (const key of ['appId', 'outDir', 'navigationBarTitleText', 'publicDir'] as const) {
     if (mp[key] !== undefined && typeof mp[key] !== 'string') {
@@ -655,4 +661,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     (Object.getPrototypeOf(value) === Object.prototype ||
       Object.getPrototypeOf(value) === null)
   );
+}
+
+function validateApiHost(host: unknown, label: string): void {
+  if (host === undefined) return;
+  if (typeof host !== 'string') throw new Error(`${label} must be a string`);
+  try {
+    const url = new URL(host);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return;
+  } catch {}
+  throw new Error(`${label} must use http or https`);
 }
