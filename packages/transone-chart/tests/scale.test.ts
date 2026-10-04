@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  CategoryScale,
-  LinearScale,
-  niceTicks,
-} from '../lib/core/scale';
+import { CategoryScale, LinearScale, niceTicks } from '../lib/core/scale';
 
 describe('niceTicks', () => {
   test('规整 0..100 到 5 段', () => {
@@ -43,6 +39,22 @@ describe('niceTicks', () => {
 });
 
 describe('LinearScale', () => {
+  test('单侧显式边界过滤域外刻度并包含边界值', () => {
+    const min = new LinearScale(0, 10, 0, 100, { min: 3 });
+    const max = new LinearScale(0, 10, 0, 100, { max: 7 });
+    expect(min.ticks).toEqual([3, 4, 6, 8, 10]);
+    expect(max.ticks).toEqual([0, 2, 4, 6, 7]);
+    expect(
+      min.ticks
+        .map((tick) => min.scale(tick))
+        .every((pos) => pos >= 0 && pos <= 100)
+    ).toBe(true);
+    expect(
+      max.ticks
+        .map((tick) => max.scale(tick))
+        .every((pos) => pos >= 0 && pos <= 100)
+    ).toBe(true);
+  });
   test('数值映射到像素范围（正向）', () => {
     const scale = new LinearScale(0, 100, 0, 100);
     expect(scale.scale(0)).toBe(0);

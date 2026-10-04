@@ -20,13 +20,16 @@ import { DemoChartLine } from './chart-line';
 import { DemoChartBar } from './chart-bar';
 import { DemoChartPie } from './chart-pie';
 import { DemoChartRadar } from './chart-radar';
+import { DemoChartFunnel } from './chart-funnel';
+import { DemoChartGauge } from './chart-gauge';
+import { DemoChartScatter } from './chart-scatter';
 
 /**
  * Live demo 注册表：docs 组件页的 demo(id) 块据此解析出宿主组件。
  * key 与组件页 path 的末段一致（button、switch、tag、progress、input、
  * popup、toast、modal、action-sheet、checkbox、radio、search-bar、
  * badge、cell、empty、tabs、navbar），以及 transone-chart 图表
- * demo（chart-line、chart-bar、chart-pie、chart-radar）。
+ * demo（chart-line、chart-bar、chart-pie、chart-radar、chart-funnel、chart-gauge、chart-scatter）。
  */
 export const demoRegistry: Record<string, AnyComponentConstructor> = {
   button: DemoButton,
@@ -50,4 +53,7 @@ export const demoRegistry: Record<string, AnyComponentConstructor> = {
   'chart-bar': DemoChartBar,
   'chart-pie': DemoChartPie,
   'chart-radar': DemoChartRadar,
+  'chart-funnel': DemoChartFunnel,
+  'chart-gauge': DemoChartGauge,
+  'chart-scatter': DemoChartScatter,
 };

@@ -17,6 +17,9 @@ import { LineChart } from './charts/line';
 import { BarChart } from './charts/bar';
 import { PieChart } from './charts/pie';
 import { RadarChart } from './charts/radar';
+import { ScatterChart } from './charts/scatter';
+import { FunnelChart } from './charts/funnel';
+import { GaugeChart } from './charts/gauge';
 import { resolveMiniProgramCanvas } from './adapters/miniprogram';
 import type { MiniProgramCanvasNode } from './adapters/miniprogram';
 import { resolveWebCanvas } from './adapters/web';
@@ -36,6 +39,12 @@ export function createChart<T extends ChartOption>(
       return new PieChart(context, option) as unknown as ChartBase<T>;
     case 'radar':
       return new RadarChart(context, option) as unknown as ChartBase<T>;
+    case 'scatter':
+      return new ScatterChart(context, option) as unknown as ChartBase<T>;
+    case 'funnel':
+      return new FunnelChart(context, option) as unknown as ChartBase<T>;
+    case 'gauge':
+      return new GaugeChart(context, option) as unknown as ChartBase<T>;
     default:
       throw new Error(
         `createChart: unsupported chart type "${(option as ChartOption).type}"`

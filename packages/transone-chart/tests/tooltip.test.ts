@@ -12,6 +12,26 @@ function makeContext(canvas: MockCanvas): ChartRenderContext {
 // 共享布局（400×300，无 title/legend）：plot.x=44，plot 宽 340，plot.y=12，plot 高 249
 
 describe('tooltip / hitTest', () => {
+  test('标签重排后高亮位置与更新后的 tooltip 一致', () => {
+    const canvas = new MockCanvas();
+    const chart = new LineChart(makeContext(canvas), {
+      type: 'line',
+      xAxis: { labels: ['A', 'B'] },
+      yAxis: { min: 0, max: 20 },
+      series: [{ name: '值', data: [10, 20] }],
+    });
+    chart.render().setHover(129, 100);
+    canvas.clear();
+    chart.setOption({ xAxis: { labels: ['B', 'A'] } }).render();
+    const symbols = canvas
+      .of('arc')
+      .filter((args) => args[0] === 129 || args[0] === 299);
+    expect(symbols.slice(-2).map((args) => [args[0], args[2]])).toEqual([
+      [129, 4],
+      [299, 2.5],
+    ]);
+    expect(canvas.of('fillText').map((args) => args[0])).toContain('B');
+  });
   test('折线：hover 类目中心 → 显示该类目所有系列值', () => {
     const canvas = new MockCanvas();
     const chart = new LineChart(makeContext(canvas), {
@@ -161,7 +181,9 @@ describe('tooltip / hitTest', () => {
 
     // Tooltip 绘制时最后一次 save() 开始一个独立的绘制块；其背景圆角矩形
     // 必须立即以 beginPath() 起始，不能复用最后一个柱体遗留的当前路径。
-    const tooltipSave = canvas.commands.map((command) => command.type).lastIndexOf('save');
+    const tooltipSave = canvas.commands
+      .map((command) => command.type)
+      .lastIndexOf('save');
     expect(canvas.commands[tooltipSave + 1]?.type).toBe('beginPath');
     expect(canvas.commands[tooltipSave + 2]?.type).toBe('moveTo');
   });

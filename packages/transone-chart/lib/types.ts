@@ -5,8 +5,9 @@
  * series / legend / title），但实现零依赖、纯 Canvas 2D 绘制。
  */
 
-/** 一期支持的图表类型。 */
-export type ChartType = 'line' | 'bar' | 'pie' | 'radar';
+/** 支持的图表类型。 */
+export type ChartType =
+  'line' | 'bar' | 'pie' | 'radar' | 'funnel' | 'gauge' | 'scatter';
 
 /** 默认主题色板（与 transone-ui 主色一致，可按需覆盖）。 */
 export const DEFAULT_PALETTE: readonly string[] = [
@@ -243,11 +244,114 @@ export interface RadarChartOption {
   backgroundColor?: string;
 }
 
+/** —— 漏斗图 —— */
+
+export interface FunnelDatum {
+  name: string;
+  /** 非负数；负数与非有限值不参与绘制，零值阶段保留标签。 */
+  value: number;
+  color?: string;
+}
+
+export interface FunnelChartOption {
+  type: 'funnel';
+  data: readonly FunnelDatum[];
+  title?: TitleOption;
+  legend?: LegendOption;
+  /** 默认 none，保留转化阶段的输入顺序。 */
+  sort?: 'none' | 'ascending' | 'descending';
+  /** 阶段间距（px），默认 4。 */
+  gap?: number;
+  /** 最小阶段宽度与末阶段底边宽度（px），默认 0。 */
+  minWidth?: number;
+  showLabel?: boolean;
+  labelFontSize?: number;
+  labelColor?: string;
+  tooltip?: TooltipOption;
+  backgroundColor?: string;
+}
+
+/** —— 仪表盘 —— */
+
+export interface GaugeChartOption {
+  type: 'gauge';
+  /** 原始值；绘图超出范围时钳制，数值标签与 tooltip 保留原值。 */
+  value: number;
+  name?: string;
+  /** 默认 0；要求有限且 min < max。 */
+  min?: number;
+  /** 默认 100。 */
+  max?: number;
+  title?: TitleOption;
+  legend?: LegendOption;
+  /** 弧度，默认 3π/4。 */
+  startAngle?: number;
+  /** 弧度，默认 9π/4；顺时针，角度跨度大于 0 且不超过 2π。 */
+  endAngle?: number;
+  /** 半径（px），默认按绘图区自动计算。 */
+  radius?: number;
+  /** 刻度分段数，默认 5，要求 1..1000 的整数。 */
+  splitCount?: number;
+  /** 轨道宽度（px），默认 12。 */
+  lineWidth?: number;
+  progressColor?: string;
+  trackColor?: string;
+  pointerColor?: string;
+  showPointer?: boolean;
+  /** 是否显示刻度标签，默认 true。 */
+  showLabel?: boolean;
+  /** 是否显示中心数值，默认 true。 */
+  showValue?: boolean;
+  labelFontSize?: number;
+  labelColor?: string;
+  valueFontSize?: number;
+  valueColor?: string;
+  tooltip?: TooltipOption;
+  backgroundColor?: string;
+}
+
+/** —— 散点图 —— */
+
+export interface ScatterDataItem {
+  value: readonly [number, number];
+  name?: string;
+  /** 点直径（px），优先于系列 symbolSize；0 隐藏该点。 */
+  symbolSize?: number;
+  color?: string;
+}
+
+export type ScatterDatum = readonly [number, number] | ScatterDataItem;
+
+export interface ScatterSeries {
+  name?: string;
+  /** 二维数值坐标；非有限坐标与显式轴范围外的点不绘制。 */
+  data: readonly ScatterDatum[];
+  color?: string;
+  /** 点直径（px），默认 8。 */
+  symbolSize?: number;
+}
+
+export interface ScatterChartOption {
+  type: 'scatter';
+  title?: TitleOption;
+  legend?: LegendOption;
+  /** 数值型 x 轴，缺省按数据自动计算范围。 */
+  xAxis?: ValueAxisOption;
+  /** 数值型 y 轴，缺省按数据自动计算范围。 */
+  yAxis?: ValueAxisOption;
+  series: readonly ScatterSeries[];
+  tooltip?: TooltipOption;
+  backgroundColor?: string;
+}
+
 export type ChartOption =
   | LineChartOption
   | BarChartOption
   | PieChartOption
-  | RadarChartOption;
+  | RadarChartOption
+  | FunnelChartOption
+  | GaugeChartOption
+  | ScatterChartOption;
 
 /** 图表渲染上下文（适配器解析后的产物）。 */
 export interface ChartRenderContext {

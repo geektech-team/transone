@@ -13,11 +13,7 @@
 import type { ICanvas2D } from './canvas';
 import { AxisDrawer } from './axis';
 import type { Box } from './layout';
-import {
-  computeLayout,
-  type LayoutInput,
-  type LayoutResult,
-} from './layout';
+import { computeLayout, type LayoutInput, type LayoutResult } from './layout';
 import { LegendDrawer, type LegendItem } from './legend';
 import { CategoryScale, LinearScale } from './scale';
 import { applyFont, measureWidth } from './text';
@@ -36,6 +32,8 @@ import {
 export interface CartesianScales {
   value: LinearScale;
   category: CategoryScale;
+  /** 双数值轴图表的 x 比例尺；折线和柱状图仍使用 category。 */
+  xValue?: LinearScale;
 }
 
 /**
@@ -97,36 +95,54 @@ export abstract class ChartBase<T extends ChartOption> {
     }
     const { ctx, width, height, dpr } = this;
 
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
+    // 命中类目变化时再绘制一帧，使系列高亮与新 tooltip 保持一致。
+    for (let pass = 0; pass < 2; pass += 1) {
+      let repaint = false;
+      ctx.save();
+      try {
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
 
-    const background = this.getBackgroundColor();
-    if (background) {
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, width, height);
+        const background = this.getBackgroundColor();
+        if (background) {
+          ctx.fillStyle = background;
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        const layout = this.computeLayout();
+        this.plot = layout.plot;
+        this.drawTitle(layout);
+        this.drawLegend(layout);
+
+        if (this.hasCartesianAxis()) {
+          this.cartesian = this.buildCartesianScales(layout);
+          this.drawCartesianAxis(layout);
+        } else {
+          this.cartesian = null;
+        }
+
+        this.drawSeries(ctx, layout, this.option);
+
+        // 数据或尺寸更新后按新几何重新命中，避免 tooltip 沿用旧值或旧区域。
+        if (this.hover) {
+          const previous = this.hover;
+          this.hover =
+            this.option.tooltip?.show === false
+              ? null
+              : this.hitTestSeries(previous.x, previous.y);
+          repaint = pass === 0 && this.hover?.name !== previous.name;
+        }
+
+        // tooltip 浮层最后绘制，保证在最上层
+        if (this.hover && !repaint) {
+          this.drawTooltip(this.hover);
+        }
+      } finally {
+        // 配置或绘制出错后也要还原 DPR、裁剪区与样式状态。
+        ctx.restore();
+      }
+      if (!repaint) break;
     }
-
-    const layout = this.computeLayout();
-    this.plot = layout.plot;
-    this.drawTitle(layout);
-    this.drawLegend(layout);
-
-    if (this.hasCartesianAxis()) {
-      this.cartesian = this.buildCartesianScales(layout);
-      this.drawCartesianAxis(layout);
-    } else {
-      this.cartesian = null;
-    }
-
-    this.drawSeries(ctx, layout, this.option);
-
-    // tooltip 浮层最后绘制，保证在最上层
-    if (this.hover) {
-      this.drawTooltip(this.hover);
-    }
-
-    ctx.restore();
     return this;
   }
 
@@ -221,8 +237,7 @@ export abstract class ChartBase<T extends ChartOption> {
 
   protected computeLayout(): LayoutResult {
     const input = this.buildLayoutInput();
-    const measure = (text: string): number =>
-      measureWidth(this.ctx, text, 11);
+    const measure = (text: string): number => measureWidth(this.ctx, text, 11);
     return computeLayout(input, measure);
   }
 
@@ -237,7 +252,8 @@ export abstract class ChartBase<T extends ChartOption> {
       title: this.getTitle(),
       legend: this.getLegend(),
       legendItems: this.getLegendItems().map((item) => item.name),
-      valueLabels: hasAxis && !horizontal ? this.computeValueLabels() : undefined,
+      valueLabels:
+        hasAxis && !horizontal ? this.computeValueLabels() : undefined,
       categoryLabels: hasAxis ? this.getCategoryLabels() : undefined,
       horizontal,
     };
@@ -302,7 +318,11 @@ export abstract class ChartBase<T extends ChartOption> {
       domain.max,
       horizontal ? plot.x : plot.y + plot.height,
       horizontal ? plot.x + plot.width : plot.y,
-      { min: valueAxis?.min, max: valueAxis?.max, splitCount: valueAxis?.splitCount }
+      {
+        min: valueAxis?.min,
+        max: valueAxis?.max,
+        splitCount: valueAxis?.splitCount,
+      }
     );
 
     const category = new CategoryScale(
@@ -385,7 +405,9 @@ export abstract class ChartBase<T extends ChartOption> {
       return;
     }
     const formatter = option?.formatter;
-    const raw = formatter ? formatter(params) : this.defaultTooltipLines(params);
+    const raw = formatter
+      ? formatter(params)
+      : this.defaultTooltipLines(params);
     const lines = Array.isArray(raw) ? raw : [raw];
     if (lines.length === 0) {
       return;

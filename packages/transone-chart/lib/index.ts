@@ -6,7 +6,7 @@
  * - 小程序：微信 / 阿里 / 字节 Canvas 2D 节点
  * - 未来原生 App：实现 ICanvas2D 契约即可接入（见 adapters/native.ts）
  *
- * 一期图表：折线 / 柱状 / 饼图 / 雷达。
+ * 图表：折线 / 柱状 / 饼图 / 雷达 / 漏斗 / 仪表盘 / 散点。
  */
 
 // 公共类型与默认主题
@@ -38,18 +38,17 @@ export type { Debounced } from './core/debounce';
 export { ChartBase } from './core/chart';
 export type { CartesianScales } from './core/chart';
 
-// 四种图表
+// 图表策略
 export { LineChart } from './charts/line';
 export { BarChart } from './charts/bar';
 export { PieChart } from './charts/pie';
 export { RadarChart } from './charts/radar';
+export { FunnelChart } from './charts/funnel';
+export { ScatterChart } from './charts/scatter';
+export { GaugeChart } from './charts/gauge';
 
 // 工厂入口
-export {
-  createChart,
-  createWebChart,
-  createMiniProgramChart,
-} from './factory';
+export { createChart, createWebChart, createMiniProgramChart } from './factory';
 
 // 适配器
 export {

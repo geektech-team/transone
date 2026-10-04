@@ -116,7 +116,15 @@ export class LinearScale {
       const auto = niceTicks(dataMin, dataMax, splitCount);
       min = min ?? auto.min;
       max = max ?? auto.max;
-      this.ticks = auto.ticks;
+      // 单侧显式边界覆盖 nice 域时，刻度必须落在最终域内，并包含端点。
+      this.ticks =
+        explicitMin !== undefined || explicitMax !== undefined
+          ? [
+              min,
+              ...auto.ticks.filter((tick) => tick > min! && tick < max!),
+              max,
+            ]
+          : auto.ticks;
       this.step = auto.step;
     } else {
       this.step = (max - min) / Math.max(1, splitCount);
@@ -178,6 +186,6 @@ export class CategoryScale {
   /** 每组（多系列）子柱宽度：按系列数均分可用宽度，并预留 20% 间隙。 */
   public groupInnerWidth(groupCount: number): number {
     const usable = this.innerWidth();
-    return usable / Math.max(1, groupCount) * 0.8;
+    return (usable / Math.max(1, groupCount)) * 0.8;
   }
 }

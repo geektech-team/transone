@@ -23,10 +23,30 @@ function makeContext(canvas: MockCanvas): ChartRenderContext {
 describe('createChart', () => {
   test('按 type 分发到对应图表类', () => {
     const canvas = new MockCanvas();
-    expect(createChart(makeContext(canvas), { type: 'line', xAxis: { labels: [] }, series: [] })).toBeInstanceOf(LineChart);
-    expect(createChart(makeContext(canvas), { type: 'bar', xAxis: { labels: [] }, series: [] })).toBeInstanceOf(BarChart);
-    expect(createChart(makeContext(canvas), { type: 'pie', data: [] })).toBeInstanceOf(PieChart);
-    expect(createChart(makeContext(canvas), { type: 'radar', indicators: [], series: [] })).toBeInstanceOf(RadarChart);
+    expect(
+      createChart(makeContext(canvas), {
+        type: 'line',
+        xAxis: { labels: [] },
+        series: [],
+      })
+    ).toBeInstanceOf(LineChart);
+    expect(
+      createChart(makeContext(canvas), {
+        type: 'bar',
+        xAxis: { labels: [] },
+        series: [],
+      })
+    ).toBeInstanceOf(BarChart);
+    expect(
+      createChart(makeContext(canvas), { type: 'pie', data: [] })
+    ).toBeInstanceOf(PieChart);
+    expect(
+      createChart(makeContext(canvas), {
+        type: 'radar',
+        indicators: [],
+        series: [],
+      })
+    ).toBeInstanceOf(RadarChart);
   });
 
   test('所有实例均为 ChartBase', () => {
@@ -37,10 +57,7 @@ describe('createChart', () => {
       { type: 'pie', data: [] },
       { type: 'radar', indicators: [], series: [] },
     ] as const) {
-      const chart = createChart(
-        makeContext(canvas),
-        option as never
-      );
+      const chart = createChart(makeContext(canvas), option as never);
       expect(chart).toBeInstanceOf(ChartBase);
     }
   });
@@ -49,7 +66,7 @@ describe('createChart', () => {
     const canvas = new MockCanvas();
     expect(() =>
       createChart(makeContext(canvas), {
-        type: 'scatter',
+        type: 'unsupported',
       } as never)
     ).toThrow(/unsupported chart type/);
   });
@@ -127,9 +144,15 @@ describe('resolveMiniProgramCanvas', () => {
     Reflect.set(globalThis, 'wx', {
       getSystemInfoSync: () => ({ pixelRatio: 2 }),
       createSelectorQuery: () => ({
-        in() { return this; },
-        select() { return this; },
-        fields() { return this; },
+        in() {
+          return this;
+        },
+        select() {
+          return this;
+        },
+        fields() {
+          return this;
+        },
         exec(callback: (result: unknown[]) => void) {
           callback([{ node, width: 160, height: 120 }]);
         },

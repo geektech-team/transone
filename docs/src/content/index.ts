@@ -54,6 +54,9 @@ import {
   chartBarPage,
   chartPiePage,
   chartRadarPage,
+  chartFunnelPage,
+  chartGaugePage,
+  chartScatterPage,
   chartCrossPlatformPage,
 } from './transone-chart';
 import {
@@ -71,7 +74,7 @@ import {
  * - transone（/transone/）：核心框架 —— 快速开始、核心概念、六个模块、API 概览
  * - transone-cli（/cli/）：多端编译器 —— 快速开始、命令、配置、目标端、构建、API
  * - transone-ui（/ui/）：UI 组件库 —— 快速上手、主题定制、17 个组件
- * - transone-chart（/transone-chart/）：图表库 —— 快速开始、架构、图表总览、折线 / 柱状 / 饼图 / 雷达、跨端集成
+ * - transone-chart（/transone-chart/）：图表库 —— 快速开始、架构、七种图表文档、跨端集成
  * - 项目（/project/）：定位与设计、目标端矩阵、路线图
  */
 export const docsPages: DocPage[] = [
@@ -126,6 +129,9 @@ export const docsPages: DocPage[] = [
   chartBarPage,
   chartPiePage,
   chartRadarPage,
+  chartFunnelPage,
+  chartGaugePage,
+  chartScatterPage,
   chartCrossPlatformPage,
   // ---- 项目（父菜单 /project/）----
   projectLandingPage,

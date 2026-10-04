@@ -13,12 +13,8 @@
  * - 小程序：平台窗口尺寸回调触发后重建图表（SelectorQuery 取最新节点尺寸）
  */
 
-import {
-  Component,
-  h,
-  type VNode,
-} from 'transone';
-import type { ChartRenderContext, ChartOption } from './types';
+import { Component, h, type VNode } from 'transone';
+import type { ChartRenderContext, ChartOption, ChartType } from './types';
 import type { ChartBase } from './core/chart';
 import { debounce, type Debounced } from './core/debounce';
 import { createChart } from './factory';
@@ -32,7 +28,7 @@ import { detectPixelRatio } from './adapters/types';
 import { resolveWebCanvas } from './adapters/web';
 
 export interface TcChartProps {
-  /** 图表配置（line / bar / pie / radar）。 */
+  /** 图表配置，按 type 选择图表策略。 */
   option: ChartOption;
   /** 自定义解析器：把 canvas 元素/节点解析为渲染上下文。 */
   resolve?: (
@@ -58,6 +54,8 @@ interface MpWindowResizeApi {
 
 export class TcChart extends Component<TcChartProps, TcChartState> {
   private chart: ChartBase<ChartOption> | null = null;
+  private chartType: ChartType | null = null;
+  private attachVersion = 0;
   private destroyed = false;
   private resizeDebounced: Debounced<() => void> | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -102,9 +100,16 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     this.setupHoverEvents();
   }
 
-  protected onUpdated(): void {
+  // Web 更新与小程序 properties observers 共用此钩子。
+  protected onPropsChange(): void {
     if (this.chart && !this.destroyed) {
-      this.chart.setOption(this.props.option).render();
+      if (this.chartType !== this.props.option.type) {
+        this.chart.destroy();
+        this.chart = null;
+        this.attachChart();
+      } else {
+        this.chart.setOption(this.props.option).render();
+      }
     } else if (!this.chart && !this.destroyed) {
       this.attachChart();
     }
@@ -127,17 +132,22 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     if (this.destroyed) {
       return;
     }
+    const version = (this.attachVersion ?? 0) + 1;
+    this.attachVersion = version;
     this.resolveContext()
       .then((context) => {
-        if (this.destroyed || !context) {
+        if (this.destroyed || !context || version !== this.attachVersion) {
           // 非浏览器环境（SSR / 构建期静态渲染）或显式跳过：渲染交给客户端水合阶段。
           return;
         }
         this.chart = createChart(context, this.props.option);
+        this.chartType = this.props.option.type;
         this.chart.render();
       })
       .catch((error: unknown) => {
-        console.error('[TcChart] attach failed:', error);
+        if (!this.destroyed && version === this.attachVersion) {
+          console.error('[TcChart] attach failed:', error);
+        }
       });
   }
 
@@ -210,7 +220,10 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     if (this.destroyed || this.resizeDebounced) {
       return;
     }
-    this.resizeDebounced = debounce(() => this.handleResize(), RESIZE_DEBOUNCE_MS);
+    this.resizeDebounced = debounce(
+      () => this.handleResize(),
+      RESIZE_DEBOUNCE_MS
+    );
 
     const platform = detectMiniProgramGlobal();
     if (platform) {
@@ -231,7 +244,9 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       typeof element.getContext === 'function' &&
       typeof ResizeObserver === 'function'
     ) {
-      this.resizeObserver = new ResizeObserver(() => this.resizeDebounced!.run());
+      this.resizeObserver = new ResizeObserver(() =>
+        this.resizeDebounced!.run()
+      );
       this.resizeObserver.observe(element);
     }
   }
@@ -319,8 +334,6 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     if (!element || typeof element.getContext !== 'function') {
       return Promise.resolve(null);
     }
-    return Promise.resolve(
-      resolveWebCanvas(element)
-    );
+    return Promise.resolve(resolveWebCanvas(element));
   }
 }

@@ -81,8 +81,8 @@ export class AxisDrawer {
         }
         ctx.beginPath();
         if (horizontal) {
-          ctx.moveTo(plot.x, pos);
-          ctx.lineTo(plot.x + plot.width, pos);
+          ctx.moveTo(pos, plot.y);
+          ctx.lineTo(pos, plot.y + plot.height);
         } else {
           ctx.moveTo(plot.x, pos);
           ctx.lineTo(plot.x + plot.width, pos);

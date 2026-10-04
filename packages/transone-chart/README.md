@@ -2,7 +2,7 @@
 
 TransOne 生态的跨端图表库：**一份 TypeScript 源码，基于 Canvas 2D 渲染**，同时跑通 Web 与微信 / 阿里 / 字节小程序，并为未来原生 App（iOS / Android / 鸿蒙）预留扩展契约。
 
-一期内置四种常用图表：**折线图 / 柱状图 / 饼图（环形）/ 雷达图**。
+内置七种常用图表：**折线图 / 柱状图 / 饼图（环形）/ 雷达图 / 漏斗图 / 仪表盘 / 散点图（气泡）**。
 
 - 零运行时依赖（`transone` 仅组件集成为 optional peer）
 - OOP + 策略模式：`core（纯引擎）→ charts（图表策略）→ adapters（平台差异）→ factory（分发）→ component（声明式组件）`
@@ -22,22 +22,36 @@ bun add -d transone-chart       # 仅引擎用法时
 
 ```tsx
 import { Component, createComponent } from 'transone';
-import { TcChart } from 'transone-chart';
+import { TcChart, type LineChartOption } from 'transone-chart';
 
-// 任意图表 Option
-const option = {
-  type: 'line',
-  title: { text: '城市指数趋势' },
-  xAxis: { labels: ['4月', '5月', '6月', '7月', '8月', '9月'] },
-  series: [
-    { name: '北京', data: [82, 85, 84, 88, 90, 92], smooth: true },
-    { name: '上海', data: [80, 83, 86, 85, 89, 91], smooth: true, area: true },
-  ],
-};
+class MyPage extends Component<
+  Record<string, never>,
+  { option: LineChartOption }
+> {
+  protected initState(): { option: LineChartOption } {
+    return {
+      option: {
+        type: 'line',
+        title: { text: '城市指数趋势' },
+        xAxis: { labels: ['4月', '5月', '6月', '7月', '8月', '9月'] },
+        series: [
+          { name: '北京', data: [82, 85, 84, 88, 90, 92], smooth: true },
+          {
+            name: '上海',
+            data: [80, 83, 86, 85, 89, 91],
+            smooth: true,
+            area: true,
+          },
+        ],
+      },
+    };
+  }
 
-class MyPage extends Component {
   render() {
-    return createComponent({ component: TcChart, props: { option } });
+    return createComponent({
+      component: TcChart,
+      props: { option: this.state.option },
+    });
   }
 }
 ```
@@ -69,24 +83,98 @@ chart3.render();
 
 所有配置均为 `ECharts` 心智（`title / legend / xAxis / yAxis / series`），但零依赖纯 Canvas 绘制。
 
-| 图表 | Option 类型 | 核心配置 |
-|---|---|---|
-| 折线 | `LineChartOption` | `smooth` 平滑曲线、`area` 面积填充、`showSymbol` 数据点、`startFromZero` |
-| 柱状 | `BarChartOption` | `stack` 堆叠分组、`horizontal` 横向、`borderRadius` 圆角、`barWidth` |
-| 饼图 | `PieChartOption` | `radius / innerRadius`（环形）、`startAngle`、`labelPosition: 'outside'` 引线外置标签 |
-| 雷达 | `RadarChartOption` | `indicators[].max` 归一化、`splitCount` 网格层、`area` 多边形填充 |
+| 图表   | Option 类型          | 核心配置                                                                              |
+| ------ | -------------------- | ------------------------------------------------------------------------------------- |
+| 折线   | `LineChartOption`    | `smooth` 平滑曲线、`area` 面积填充、`showSymbol` 数据点、`startFromZero`              |
+| 柱状   | `BarChartOption`     | `stack` 堆叠分组、`horizontal` 横向、`borderRadius` 圆角、`barWidth`                  |
+| 饼图   | `PieChartOption`     | `radius / innerRadius`（环形）、`startAngle`、`labelPosition: 'outside'` 引线外置标签 |
+| 雷达   | `RadarChartOption`   | `indicators[].max` 归一化、`splitCount` 网格层、`area` 多边形填充                     |
+| 漏斗   | `FunnelChartOption`  | `data` 阶段数据、`sort` 顺序、`gap` 间距、`minWidth` 最小宽度                         |
+| 仪表盘 | `GaugeChartOption`   | `value / min / max` 量程、`startAngle / endAngle` 弧度、进度弧与指针                  |
+| 散点   | `ScatterChartOption` | 双数值轴、二维 `data`、点与系列的 `symbolSize`（px 直径），可绘制气泡                 |
 
 完整字段见 [`lib/types.ts`](./lib/types.ts)（每个字段均带中文注释）。
 
+### 漏斗 / 仪表盘 / 散点用法
+
+以下是三种图表的 `initState()` 写法；从 `transone-chart` 导入对应的 Option 类型，通过 `this.state.option` 传给 `TcChart`。示例只使用可序列化数据，适用于 Web 与小程序。
+
+```ts
+// 漏斗：默认 sort: 'none' 保留 data 的业务阶段顺序。
+// 需要按 value 排序时设置 'ascending' 或 'descending'。
+protected initState(): { option: FunnelChartOption } {
+  return {
+    option: {
+      type: 'funnel',
+      title: { text: '访问到付费的转化' },
+      data: [
+        { name: '访问', value: 1000 },
+        { name: '点击', value: 650 },
+        { name: '注册', value: 320 },
+        { name: '付费', value: 160 },
+      ],
+      gap: 6,       // px，默认 4
+      minWidth: 40, // px，默认 0
+    },
+  };
+}
+```
+
+```ts
+protected initState(): { option: GaugeChartOption } {
+  return {
+    option: {
+      type: 'gauge',
+      title: { text: '目标完成率' },
+      name: '完成率',
+      value: 82,
+      min: 0, max: 100,
+      splitCount: 5,
+      lineWidth: 12,
+      progressColor: '#00b578',
+      showPointer: true,
+      showLabel: true,
+      showValue: true,
+    },
+  };
+}
+```
+
+仪表盘角度使用弧度，默认 `startAngle: 3π/4`、`endAngle: 9π/4`，顺时针绘制。`value` 超出量程时，进度弧和指针位置钳制到边界，原始 `option.value` 不变，数值文本和 tooltip 仍显示原值。例如 `value: 120`、`max: 100` 时，图形停在 100，文本仍显示 120。
+
+```ts
+protected initState(): { option: ScatterChartOption } {
+  return {
+    option: {
+      type: 'scatter',
+      title: { text: '生活成本与宜居度' },
+      xAxis: { min: 0, max: 100 },
+      yAxis: { min: 0, max: 100 },
+      series: [{
+        name: '城市',
+        symbolSize: 12,
+        data: [
+          [60, 80],
+          { name: '杭州', value: [72, 91], symbolSize: 18 },
+          { name: '成都', value: [55, 88], color: '#13c2c2' },
+        ],
+      }],
+    },
+  };
+}
+```
+
+散点的两个坐标轴都使用 `ValueAxisOption`，每个点为 `[x, y]` 或 `{ value: [x, y], name?, symbolSize?, color? }`。`symbolSize` 为直径（px），优先级是点配置 → 系列配置 → 默认 8；用不同的数值大小即可绘制气泡，无需函数 props。颜色优先级为点 `color` → 系列 `color` → 默认色板，图例按系列展示。无效二维点会被过滤，超出显式轴范围的点会跳过绘制与命中。
+
 ## 跨端支持
 
-| 平台 | 支持 | 说明 |
-|---|---|---|
-| Web | ✅ | `HTMLCanvasElement.getContext('2d')` 直接满足 `ICanvas2D` |
-| 微信小程序 | ✅ | `<canvas type="2d">` + SelectorQuery 节点；CLI 已内置 canvas 标签映射 |
-| 阿里小程序 | ✅ | 同一适配层（安全取全局 `my` / `tt` / `wx`） |
-| 字节小程序 | ✅ | 同上 |
-| iOS / Android / 鸿蒙 App | 🔜 契约就绪 | 实现 `ICanvas2D`（约 20 个方法）即可接入，见下节 |
+| 平台                     | 支持        | 说明                                                                  |
+| ------------------------ | ----------- | --------------------------------------------------------------------- |
+| Web                      | ✅          | `HTMLCanvasElement.getContext('2d')` 直接满足 `ICanvas2D`             |
+| 微信小程序               | ✅          | `<canvas type="2d">` + SelectorQuery 节点；CLI 已内置 canvas 标签映射 |
+| 阿里小程序               | ✅          | 同一适配层（安全取全局 `my` / `tt` / `wx`）                           |
+| 字节小程序               | ✅          | 同上                                                                  |
+| iOS / Android / 鸿蒙 App | 🔜 契约就绪 | 实现 `ICanvas2D`（约 20 个方法）即可接入，见下节                      |
 
 > 小程序端 DPR 通过各端 `getSystemInfoSync()` 获取，像素比自动适配，无需手工处理。
 
@@ -117,7 +205,7 @@ const host = {
   height: 260,
   pixelRatio: 2,
   getContext(type: '2d') {
-    return { beginPath() {}, moveTo() {}, /* ...实现 ICanvas2D */ };
+    return { beginPath() {}, moveTo() {} /* ...实现 ICanvas2D */ };
   },
 };
 const chart = createChart(resolveNativeCanvas(host), option);
@@ -136,7 +224,8 @@ chart.render();
 │ factory.ts     createChart(option) 按 type 分发策略    │
 ├─────────────────────────────────────────────────────┤
 │ charts/        LineChart / BarChart / PieChart /     │
-│                RadarChart（策略类，只依赖 core）       │
+│                RadarChart / FunnelChart / GaugeChart │
+│                ScatterChart（策略类，只依赖 core）     │
 ├─────────────────────────────────────────────────────┤
 │ core/          canvas.ts(ICanvas2D 契约) · scale ·    │
 │                layout · axis · legend · chart(基类)   │
@@ -159,7 +248,7 @@ save → scale(dpr) → clear → 背景 → 布局(title/legend/轴区逐层扣
 ## 开发
 
 ```bash
-bun test                  # 62 个单测（mock canvas 断言绘制命令 + 防抖 / resize / tooltip 命中）
+bun test                  # mock canvas 断言绘制命令 + 防抖 / resize / tooltip 命中
 bun run build             # tsc 声明 + Bun.build（minify, ESM）
 bun run --cwd ../../playground/chart-demo build:web   # 演示项目构建
 ```
@@ -169,16 +258,16 @@ bun run --cwd ../../playground/chart-demo build:web   # 演示项目构建
 ```
 packages/transone-chart/
 ├── lib/               # 源码（core / charts / adapters / factory / component / types）
-├── tests/             # 单测（scale / layout / line / bar / pie / radar / factory / debounce / resize）
+├── tests/             # 单测（比例尺 / 布局 / 七种图表 / factory / debounce / resize）
 ├── scripts/build.ts   # 构建脚本
-└── playground 演示：playground/chart-demo（城市指数场景，五种图表卡片）
+└── playground 演示：playground/chart-demo（八张图表卡片，含横向柱状图）
 ```
 
 ## 路线图
 
 - [x] 一期：折线 / 柱状 / 饼 / 雷达 + Web / 小程序 + 原生契约
+- [x] 更多图表：漏斗 / 仪表盘 / 散点（点级大小支持气泡）
 - [x] tooltip：Web 悬浮命中数据点 / 柱体 / 扇区显示数值，formatter 自定义内容
 - [ ] 交互增强：hover 高亮 / 点击事件（event 层）
-- [ ] 更多图表：散点 / 面积 / 漏斗 / 仪表盘
 - [ ] 原生 App 适配器实现（iOS / Android / 鸿蒙桥层）
 - [ ] 主题系统 / 动画过渡
