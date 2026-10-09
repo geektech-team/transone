@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import {
   basename,
   extname,
@@ -18,6 +19,7 @@ const DEVELOPMENT_URL_PREFIX = '/dev';
 const INVALID_DEVELOPMENT_DIRECTORY_MESSAGE =
   'Development output must be a subdirectory of the project root';
 const LIVE_RELOAD_PATH = '/__transone/reload';
+const DEVELOPMENT_OUTPUT_RETENTION_MS = 5_000;
 const WATCHED_EXTENSIONS = new Set([
   '.ts',
   '.js',
@@ -55,7 +57,10 @@ export async function startDevServer(
     return startWatchingDevServer(options);
   }
   const instance = await createServerInstance(options, false);
-  return instance.server;
+  return createServerHandle(
+    () => instance,
+    () => undefined
+  );
 }
 
 async function startWatchingDevServer(
@@ -83,7 +88,9 @@ async function startWatchingDevServer(
     for (const entry of entries) {
       const bundle = await instance.getBundle(entry);
       if (bundle instanceof Response) {
-        console.error('TransOne rebuild failed; keeping the last working page.');
+        console.error(
+          'TransOne rebuild failed; keeping the last working page.'
+        );
         return;
       }
     }
@@ -92,7 +99,8 @@ async function startWatchingDevServer(
 
   async function restart(): Promise<void> {
     watcher.dispose();
-    instance.server.stop(true);
+    await instance.server.stop(true);
+    await instance.dispose();
     instance = await createServerInstance(options, true);
     watcher = createProjectWatcher(instance, onChange);
     console.log(
@@ -122,8 +130,12 @@ function createProjectWatcher(
 interface DevServerInstance {
   server: DevServer;
   config: ResolvedConfig;
-  getBundle: (entry: string) => Promise<DevelopmentBundle | Response>;
+  getBundle: (
+    entry: string,
+    acquire?: boolean
+  ) => Promise<DevelopmentBundle | Response>;
   markDirty: (entries: string[]) => void;
+  dispose: () => Promise<void>;
   liveReload: LiveReloadHub | undefined;
 }
 
@@ -148,19 +160,25 @@ async function createServerInstance(
   const sessionId = createGenerationId();
   const sessionOutDir = resolve(developmentOutDir, sessionId);
   const artifacts = new Map<string, DevelopmentOutput>();
-  const buildProject = createDevelopmentBuilder(sessionId, sessionOutDir);
+  const buildProject = createDevelopmentBuilder(
+    sessionId,
+    sessionOutDir,
+    artifacts
+  );
   const liveReload = watch ? createLiveReloadHub() : undefined;
   const bundles = new Map<string, DevelopmentBundle>();
   const dirtyEntries = new Set<string>();
 
   const getBundle = async (
-    entry: string
+    entry: string,
+    acquire = false
   ): Promise<DevelopmentBundle | Response> => {
     const cached = bundles.get(entry);
     if (watch && cached !== undefined && !dirtyEntries.has(entry)) {
+      if (acquire) cached.activeRequests += 1;
       return cached;
     }
-    const bundle = await buildProject(entry);
+    const bundle = await buildProject.build(entry);
     if (bundle instanceof Response) {
       if (watch) {
         dirtyEntries.add(entry);
@@ -171,6 +189,7 @@ async function createServerInstance(
       bundles.set(entry, bundle);
       dirtyEntries.delete(entry);
     }
+    if (acquire) bundle.activeRequests += 1;
     return bundle;
   };
 
@@ -203,6 +222,7 @@ async function createServerInstance(
     markDirty: (entries) => {
       entries.forEach((entry) => dirtyEntries.add(entry));
     },
+    dispose: buildProject.dispose,
     liveReload,
   };
 }
@@ -214,9 +234,11 @@ function createServerHandle(
   return new Proxy({} as DevServer, {
     get(_target, property) {
       if (property === 'stop') {
-        return (closeActiveConnections?: boolean) => {
+        return async (closeActiveConnections?: boolean) => {
           disposeWatcher();
-          getInstance().server.stop(closeActiveConnections);
+          const instance = getInstance();
+          await instance.server.stop(closeActiveConnections);
+          await instance.dispose();
         };
       }
       const server = getInstance().server as unknown as Record<
@@ -235,7 +257,10 @@ async function serveProjectRequest(
   request: Request,
   config: ResolvedConfig,
   pages: Record<string, string>,
-  getBundle: (entry: string) => Promise<DevelopmentBundle | Response>,
+  getBundle: (
+    entry: string,
+    acquire?: boolean
+  ) => Promise<DevelopmentBundle | Response>,
   artifacts: Map<string, DevelopmentOutput>,
   liveReload: LiveReloadHub | undefined
 ): Promise<Response> {
@@ -244,7 +269,7 @@ async function serveProjectRequest(
 
   if (route !== undefined) {
     const entry = pages[route];
-    const bundle = await getBundle(entry);
+    const bundle = await getBundle(entry, true);
     if (bundle instanceof Response) {
       return bundle;
     }
@@ -273,11 +298,13 @@ async function serveProjectRequest(
     } catch (error: unknown) {
       console.error(error);
       return buildFailureResponse();
+    } finally {
+      releaseDevelopmentBundle(bundle);
     }
   }
 
   if (pathname === '/bundle.js') {
-    const bundle = await getBundle(config.entry);
+    const bundle = await getBundle(config.entry, true);
     if (bundle instanceof Response) {
       return bundle;
     }
@@ -294,6 +321,8 @@ async function serveProjectRequest(
     } catch (error: unknown) {
       console.error(error);
       return buildFailureResponse();
+    } finally {
+      releaseDevelopmentBundle(bundle);
     }
   }
 
@@ -315,7 +344,7 @@ async function serveProjectRequest(
     !pathname.startsWith('/api/') &&
     !/\.[a-zA-Z0-9]+$/.test(pathname)
   ) {
-    const bundle = await getBundle(config.entry);
+    const bundle = await getBundle(config.entry, true);
     if (!(bundle instanceof Response)) {
       try {
         const { renderProjectHtml } = await import('./project');
@@ -341,6 +370,8 @@ async function serveProjectRequest(
       } catch (error: unknown) {
         console.error(error);
         return buildFailureResponse();
+      } finally {
+        releaseDevelopmentBundle(bundle);
       }
     }
   }
@@ -489,6 +520,9 @@ interface DevelopmentOutput {
 }
 
 interface DevelopmentBundle {
+  outDir: string;
+  activeRequests: number;
+  retire?: () => void;
   entry: DevelopmentOutput;
   stylesheets: DevelopmentOutput[];
   artifacts: ReadonlyMap<string, DevelopmentOutput>;
@@ -496,20 +530,85 @@ interface DevelopmentBundle {
 
 function createDevelopmentBuilder(
   sessionId: string,
-  sessionOutDir: string
-): (entry: string) => Promise<DevelopmentBundle | Response> {
+  sessionOutDir: string,
+  artifacts: Map<string, DevelopmentOutput>
+): {
+  build: (entry: string) => Promise<DevelopmentBundle | Response>;
+  dispose: () => Promise<void>;
+} {
   let queue = Promise.resolve();
+  let disposed = false;
+  let disposal: Promise<void> | undefined;
+  const latestBundles = new Map<string, DevelopmentBundle>();
+  const retirementTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  return (entry) => {
-    const result = queue.then(() =>
-      buildProjectBundle(entry, sessionId, sessionOutDir)
-    );
+  function retire(bundle: DevelopmentBundle): void {
+    bundle.retire = () => {
+      const previousTimer = retirementTimers.get(bundle.outDir);
+      if (previousTimer) clearTimeout(previousTimer);
+      retirementTimers.delete(bundle.outDir);
+      if (disposed || bundle.activeRequests > 0) return;
+      // Let the browser finish loading the HTML response's assets before
+      // removing this generation, including when SSR took longer than usual.
+      const timer = setTimeout(() => {
+        retirementTimers.delete(bundle.outDir);
+        void removeDevelopmentBundle(bundle, artifacts).catch(
+          (error: unknown) => console.error(error)
+        );
+      }, DEVELOPMENT_OUTPUT_RETENTION_MS);
+      timer.unref();
+      retirementTimers.set(bundle.outDir, timer);
+    };
+    bundle.retire();
+  }
+
+  function build(entry: string): Promise<DevelopmentBundle | Response> {
+    const result = queue.then(async () => {
+      if (disposed) return buildFailureResponse();
+      const bundle = await buildProjectBundle(entry, sessionId, sessionOutDir);
+      if (!(bundle instanceof Response)) {
+        const previous = latestBundles.get(entry);
+        latestBundles.set(entry, bundle);
+        if (previous) retire(previous);
+      }
+      return bundle;
+    });
     queue = result.then(
       () => undefined,
       () => undefined
     );
     return result;
-  };
+  }
+
+  function dispose(): Promise<void> {
+    if (disposal) return disposal;
+    disposed = true;
+    retirementTimers.forEach((timer) => clearTimeout(timer));
+    retirementTimers.clear();
+    disposal = queue.then(async () => {
+      await rm(sessionOutDir, { recursive: true, force: true });
+      latestBundles.clear();
+      artifacts.clear();
+    });
+    return disposal;
+  }
+
+  return { build, dispose };
+}
+
+function releaseDevelopmentBundle(bundle: DevelopmentBundle): void {
+  bundle.activeRequests -= 1;
+  bundle.retire?.();
+}
+
+async function removeDevelopmentBundle(
+  bundle: DevelopmentBundle,
+  artifacts: Map<string, DevelopmentOutput>
+): Promise<void> {
+  await rm(bundle.outDir, { recursive: true, force: true });
+  for (const pathname of bundle.artifacts.keys()) {
+    artifacts.delete(pathname);
+  }
 }
 
 async function buildProjectBundle(
@@ -536,6 +635,7 @@ async function buildProjectBundle(
     },
   };
 
+  let success = false;
   try {
     const result = await Bun.build(buildOptions);
     const entryArtifact = result.outputs.find(isEntryJavaScriptOutput);
@@ -573,7 +673,10 @@ async function buildProjectBundle(
       throw new Error('Development entry output was not indexed');
     }
 
+    success = true;
     return {
+      outDir: generationOutDir,
+      activeRequests: 0,
       entry,
       stylesheets: result.outputs
         .filter(isStylesheetOutput)
@@ -584,6 +687,10 @@ async function buildProjectBundle(
   } catch (error: unknown) {
     console.error(error);
     return buildFailureResponse();
+  } finally {
+    if (!success) {
+      await rm(generationOutDir, { recursive: true, force: true });
+    }
   }
 }
 

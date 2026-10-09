@@ -34,6 +34,8 @@ Scaffolds a new TransOne project in the current directory (refuses to overwrite 
 
 Starts the development server (Web target only) with optional watch mode (`--no-watch` to disable), custom `--host` / `--port`, and a `--base` path.
 
+Development bundles are written to `dist/dev/h5/<session>/<generation>`. After a successful rebuild, superseded generations and their resource URLs are removed after a five-second grace period; an in-flight page render delays that period until it finishes. Failed builds discard their temporary output and keep the last successful bundle. Stopping or restarting the server cleans up its own session directory.
+
 ### `transone build`
 
 Builds the app for a target:

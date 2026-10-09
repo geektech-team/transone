@@ -37,7 +37,7 @@
     },
     "packages/transone-cli": {
       "name": "transone-cli",
-      "version": "0.6.1",
+      "version": "0.6.3",
       "bin": {
         "transone": "bin/transone.ts",
       },

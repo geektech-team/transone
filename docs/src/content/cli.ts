@@ -207,6 +207,7 @@ Targets: web, mp-weixin, mp-alipay, mp-bytedance, app-ios, app-android, app-harm
     codeBlock('bash', `transone create
 # TransOne project created at /path/to/my-app (5 files)`),
     heading(2, 'transone dev'),
+    paragraph('开发产物写入 dist/dev/h5/<session>/<generation>。重建成功后，旧产物及其资源索引会在 5 秒后回收；仍在渲染页面的请求结束后才开始计时。构建失败会清理本次临时产物并保留上次成功版本；停止或重启服务器会清理当前会话目录。'),
     table(
       ['参数', '默认值', '说明'],
       [
