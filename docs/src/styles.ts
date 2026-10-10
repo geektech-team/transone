@@ -2,7 +2,7 @@ import type { StyleSheet } from 'transone';
 
 /**
  * 文档站全局样式。作为 StyleSheet 传给 SSR 文档壳（renderHtmlDocument 的
- * styles 选项），构建产物的 HTML 直接内联 <style>，客户端无需重新注入。
+ * styles 选项），CLI 将渲染后的样式输出为静态 CSS，客户端通过 link 加载。
  */
 
 const ACCENT = '#2563eb';

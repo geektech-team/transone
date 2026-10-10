@@ -27,6 +27,10 @@ transone dev                          # 开发服务（仅 web）
 transone create                       # 脚手架
 ```
 
+Web 的 `dev`、`build` 会将可安全静态确定的组件 `initStyles()` 样式与文档样式输出为静态 CSS，通过 `<link rel="stylesheet">` 加载。组件提取支持字面量、不可变模块常量、hover、media 与 rpx 换算；依赖 props/state、后续修改 StyleManager 或含不支持语句的方法继续在运行时处理。无法安全确定选择器或跨模块继承关系时，当前 bundle 的组件样式保留在运行时。带标识的文档 `<style>` 和含相对资源 URL 的样式保留内联，以维持原有行为。组件应使用专属选择器：提取的规则在挂载前就已生效，并按稳定的源文件顺序排列。
+
+Web 生产入口与分块 JS 文件名包含内容 hash，例如 `main-<hash>.js`，HTML 自动引用实际文件名；内容不变时 hash 不变。小程序及库入口保留平台与包约定的文件名。
+
 ```bash
 bun test          # 测试
 bun run build     # 构建 dist（CLI bundle + .d.ts）

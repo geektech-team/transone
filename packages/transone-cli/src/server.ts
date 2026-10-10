@@ -9,10 +9,12 @@ import {
   sep,
 } from 'node:path';
 import { isEntryJavaScriptOutput, isStylesheetOutput } from './build-output';
+import { emitComponentStyles, emitDocumentStyles } from './document-styles';
 import { resolveConfig } from './config';
 import { createProxyHandler } from './proxy';
 import { assertSafeSubdirectory } from './safe-path';
 import { createFileWatcher, type FileWatcher } from './watch';
+import { buildWebBundle } from './web-bundle';
 import type { ResolveConfigOptions, ResolvedConfig } from './types';
 
 const DEVELOPMENT_URL_PREFIX = '/dev';
@@ -276,7 +278,7 @@ async function serveProjectRequest(
 
     try {
       const { renderProjectHtml } = await import('./project');
-      const html = await renderProjectHtml(
+      const rendered = await renderProjectHtml(
         config,
         {
           head: bundle.stylesheets.map(({ pathname: href }) => ({
@@ -288,6 +290,7 @@ async function serveProjectRequest(
         entry,
         route
       );
+      const html = await emitDevelopmentDocumentStyles(rendered, bundle);
       publishDevelopmentBundle(bundle, artifacts);
       return new Response(liveReload ? injectLiveReloadScript(html) : html, {
         headers: {
@@ -348,7 +351,7 @@ async function serveProjectRequest(
     if (!(bundle instanceof Response)) {
       try {
         const { renderProjectHtml } = await import('./project');
-        const html = await renderProjectHtml(
+        const rendered = await renderProjectHtml(
           config,
           {
             head: bundle.stylesheets.map(({ pathname: href }) => ({
@@ -360,6 +363,7 @@ async function serveProjectRequest(
           config.entry,
           '/'
         );
+        const html = await emitDevelopmentDocumentStyles(rendered, bundle);
         publishDevelopmentBundle(bundle, artifacts);
         return new Response(liveReload ? injectLiveReloadScript(html) : html, {
           headers: {
@@ -521,11 +525,36 @@ interface DevelopmentOutput {
 
 interface DevelopmentBundle {
   outDir: string;
+  generationUrl: string;
   activeRequests: number;
   retire?: () => void;
   entry: DevelopmentOutput;
   stylesheets: DevelopmentOutput[];
-  artifacts: ReadonlyMap<string, DevelopmentOutput>;
+  componentStylesheets: DevelopmentOutput[];
+  artifacts: Map<string, DevelopmentOutput>;
+}
+
+async function emitDevelopmentDocumentStyles(
+  rendered: string,
+  bundle: DevelopmentBundle
+): Promise<string> {
+  const generationUrl = bundle.generationUrl;
+  const result = await emitDocumentStyles(
+    rendered,
+    bundle.outDir,
+    (path) => `${generationUrl}/${basename(path)}`,
+    bundle.stylesheets.map((stylesheet) => stylesheet.pathname),
+    bundle.componentStylesheets.map((stylesheet) => stylesheet.pathname)
+  );
+  for (const path of result.assets) {
+    const pathname = `${generationUrl}/${basename(path)}`;
+    bundle.artifacts.set(pathname, {
+      filePath: path,
+      pathname,
+      type: 'text/css; charset=utf-8',
+    });
+  }
+  return result.html;
 }
 
 function createDevelopmentBuilder(
@@ -625,7 +654,6 @@ async function buildProjectBundle(
     target: 'browser' as const,
     format: 'esm' as const,
     sourcemap: 'inline' as const,
-    write: true,
     throw: false,
     publicPath: `${generationUrl}/`,
     naming: {
@@ -637,7 +665,7 @@ async function buildProjectBundle(
 
   let success = false;
   try {
-    const result = await Bun.build(buildOptions);
+    const { result, styles } = await buildWebBundle(buildOptions);
     const entryArtifact = result.outputs.find(isEntryJavaScriptOutput);
     if (!result.success || !entryArtifact) {
       result.logs.forEach((log) => console.error(log));
@@ -649,7 +677,7 @@ async function buildProjectBundle(
 
     const pendingArtifacts = new Map<string, DevelopmentOutput>();
     const outputs = new Map<
-      Awaited<ReturnType<typeof Bun.build>>['outputs'][number],
+      (typeof result.outputs)[number],
       DevelopmentOutput
     >();
 
@@ -673,11 +701,23 @@ async function buildProjectBundle(
       throw new Error('Development entry output was not indexed');
     }
 
+    const componentStylesheets = (
+      await emitComponentStyles(styles, generationOutDir)
+    ).map((filePath) => ({
+      filePath,
+      pathname: `${generationUrl}/${basename(filePath)}`,
+      type: 'text/css; charset=utf-8',
+    }));
+    for (const output of componentStylesheets)
+      pendingArtifacts.set(output.pathname, output);
+
     success = true;
     return {
       outDir: generationOutDir,
+      generationUrl,
       activeRequests: 0,
       entry,
+      componentStylesheets,
       stylesheets: result.outputs
         .filter(isStylesheetOutput)
         .map((output) => outputs.get(output))
@@ -713,7 +753,7 @@ function publishDevelopmentBundle(
 function createDevelopmentOutput(
   generationOutDir: string,
   generationUrl: string,
-  output: Awaited<ReturnType<typeof Bun.build>>['outputs'][number]
+  output: { path: string; type: string }
 ): DevelopmentOutput {
   const filePath = resolve(output.path);
   const pathFromGeneration = relative(generationOutDir, filePath);

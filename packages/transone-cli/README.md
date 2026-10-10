@@ -52,6 +52,10 @@ transone build --target mp-xiaohongshu # Xiaohongshu mini-program project (XHSML
 - `--base` sets the deployment base path (e.g. a GitHub Pages sub-path).
 - `--library` builds in library mode (no page entry required).
 
+Web `dev` and `build` emit fixed component `initStyles()` rules that can be resolved safely and document styles as static CSS files, loaded through `<link rel="stylesheet">`. Component extraction supports literal values and immutable module constants, including hover, media queries and rpx conversion. Methods that depend on props/state, mutate their style manager later, or contain unsupported statements keep runtime styling. When selectors or inheritance cannot be resolved safely, the bundle retains runtime component styling. Identified document `<style>` elements and sheets with relative resource URLs stay inline to preserve their behavior. Use component-specific selectors: extracted rules are available before component mount and follow a stable source-file order.
+
+Web production entry and chunk JavaScript filenames contain a content hash (for example `main-<hash>.js`); HTML references the emitted filenames. Unchanged content keeps its hash. Mini-program and library entry filenames follow their existing platform/package contracts.
+
 The iOS, Android, and Harmony native app targets are implemented. A generated project should still be opened in its platform IDE for runtime/device validation.
 
 ## Targets

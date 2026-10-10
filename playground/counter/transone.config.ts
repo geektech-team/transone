@@ -9,7 +9,6 @@ export default defineConfig({
     port: 52311,
   },
   build: {
-    outDir: 'dist/web',
   },
   mp: {
     // host: 'https://api.example.com', // 默认接口地址，平台配置可覆盖

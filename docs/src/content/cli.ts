@@ -208,6 +208,7 @@ Targets: web, mp-weixin, mp-alipay, mp-bytedance, app-ios, app-android, app-harm
 # TransOne project created at /path/to/my-app (5 files)`),
     heading(2, 'transone dev'),
     paragraph('开发产物写入 dist/dev/h5/<session>/<generation>。重建成功后，旧产物及其资源索引会在 5 秒后回收；仍在渲染页面的请求结束后才开始计时。构建失败会清理本次临时产物并保留上次成功版本；停止或重启服务器会清理当前会话目录。'),
+    paragraph('可安全静态确定的组件样式与文档样式生成静态 CSS，通过 link 加载；依赖 props/state 的动态组件样式继续在运行时处理。CSS 与当前开发构建一起更新和回收。'),
     table(
       ['参数', '默认值', '说明'],
       [
@@ -396,10 +397,13 @@ export const cliBuildPage: DocPage = {
     heading(2, '站点构建（web）'),
     ol([
       [strong('解析配置：'), 'resolveConfig 合并默认值 / transone.config.ts / CLI 参数（含 --base）。'],
-      [strong('打包入口：'), '对每个页面路由用 Bun.build 打包入口为客户端 bundle（main.js）。'],
-      [strong('SSR 渲染：'), '为每个页面注入部署 URL（http://127.0.0.1<base><route>），调用入口的 app.renderHtmlDocument 输出 HTML 文档壳（内联样式 + 脚本引用）。'],
-      [strong('输出静态产物：'), '按 directoryPages 输出为 /{route}/index.html 或扁平 {route}.html，样式内联、资源相对路径引用，可直接静态托管。'],
+      [strong('打包入口：'), '对每个页面路由用 Bun.build 打包入口为带内容 hash 的客户端 bundle（main-<hash>.js）。'],
+      [strong('样式提取：'), '将可静态确定的 initStyles 规则编译为 components-<hash>.css，保留 hover / media / rpx 语义；依赖 props/state 或后续修改 StyleManager 的样式继续在运行时处理。'],
+      [strong('SSR 渲染：'), '为每个页面注入部署 URL（http://127.0.0.1<base><route>），调用入口的 app.renderHtmlDocument 输出 HTML，将文档 CSS 生成 document-<hash>.css 并在原位置替换为 link；带标识或相对资源 URL 的样式保留内联。'],
+      [strong('输出静态产物：'), '按 directoryPages 输出为 /{route}/index.html 或扁平 {route}.html，HTML 引用带内容 hash 的 JS 与静态 CSS，可直接静态托管。'],
     ]),
+    paragraph('固定组件 CSS 在文档样式之后加载。提取的规则在组件挂载前生效，组件之间按稳定的源文件顺序排列；使用组件专属选择器可避免依赖挂载顺序的覆盖。'),
+    paragraph('无法安全确定选择器或跨模块继承关系时，当前 bundle 的组件样式保留在运行时。'),
     paragraph(
       'base 子路径：GitHub Pages 等把站点挂在子路径下（如',
       inlineCode('/transone/'),

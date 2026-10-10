@@ -1,7 +1,9 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { isEntryJavaScriptOutput, isStylesheetOutput } from '../build-output';
+import { emitComponentStyles, emitDocumentStyles } from '../document-styles';
 import { assertSafeSubdirectoryDoesNotContain } from '../safe-path';
+import { buildWebBundle } from '../web-bundle';
 import type { BuildOptions, BuildResult, ResolvedConfig } from '../types';
 import type { BuildTarget } from './types';
 
@@ -13,6 +15,7 @@ interface BuiltPage {
   assets: string[];
   javascriptAssets: string[];
   stylesheetAssets: string[];
+  componentStylesheetAssets: string[];
 }
 
 /**
@@ -70,7 +73,7 @@ export class WebTarget implements BuildTarget {
         throw new Error(`Missing built assets for entry: ${entry}`);
       }
       const pageHtmlPath = htmlPath(config, route);
-      const html = await renderProjectHtml(
+      const rendered = await renderProjectHtml(
         config,
         {
           head: page.stylesheetAssets.map((asset) => ({
@@ -88,15 +91,26 @@ export class WebTarget implements BuildTarget {
         page.entry,
         route
       );
+      const { html, assets: documentStyles } = await emitDocumentStyles(
+        rendered,
+        config.build.outDir,
+        (asset) => toAssetUrl(config.build.outDir, pageHtmlPath, asset),
+        page.stylesheetAssets.map((asset) =>
+          toAssetUrl(config.build.outDir, pageHtmlPath, asset)
+        ),
+        page.componentStylesheetAssets.map((asset) =>
+          toAssetUrl(config.build.outDir, pageHtmlPath, asset)
+        )
+      );
       await mkdir(dirname(pageHtmlPath), { recursive: true });
       await writeFile(pageHtmlPath, html);
-      assetsBuilt.push(...page.assets, pageHtmlPath);
+      assetsBuilt.push(...page.assets, ...documentStyles, pageHtmlPath);
     }
 
     return {
       root: config.root,
       outDir: config.build.outDir,
-      assetsBuilt,
+      assetsBuilt: [...new Set(assetsBuilt)],
     };
   }
 }
@@ -105,18 +119,21 @@ async function buildPage(
   config: ResolvedConfig,
   entry: string
 ): Promise<BuiltPage | string> {
-  let result: Awaited<ReturnType<typeof Bun.build>>;
+  let result: Awaited<ReturnType<typeof buildWebBundle>>['result'];
+  let styles: ReadonlyMap<string, string>;
   try {
-    result = await Bun.build({
+    const bundle = await buildWebBundle({
       entrypoints: [entry],
       outdir: config.build.outDir,
       target: 'browser',
       format: 'esm',
       // 生产构建默认压缩；TRANSONE_MINIFY=0 时生成未压缩产物，便于排查问题
       minify: process.env.TRANSONE_MINIFY !== '0',
-      naming: { entry: '[name].[ext]', chunk: '[name]-[hash].[ext]' },
+      naming: { entry: '[name]-[hash].[ext]', chunk: '[name]-[hash].[ext]' },
       throw: false,
     });
+    result = bundle.result;
+    styles = bundle.styles;
   } catch (error: unknown) {
     return pageFailureReason(entry, [errorMessage(error)]);
   }
@@ -140,11 +157,16 @@ async function buildPage(
     );
   }
 
+  const componentStylesheetAssets = await emitComponentStyles(
+    styles,
+    config.build.outDir
+  );
   return {
     entry,
-    assets,
+    assets: [...assets, ...componentStylesheetAssets],
     javascriptAssets,
     stylesheetAssets,
+    componentStylesheetAssets,
   };
 }
 

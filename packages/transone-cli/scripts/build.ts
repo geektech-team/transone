@@ -30,7 +30,7 @@ const result = await Bun.build({
   sourcemap: 'linked',
   splitting: true,
   packages: 'bundle',
-  // typescript 体积大且仅在库构建（--library 的 dts 生成）时通过 bunx tsc 使用：
+  // typescript 体积大，供 Web 样式提取与原生端静态分析使用：
   // 作为运行时依赖，不打包进 CLI
   external: ['typescript'],
   naming: {
