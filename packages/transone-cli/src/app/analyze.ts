@@ -10,23 +10,50 @@ const CONTAINERS = new Set(['view', 'main', 'div']);
 const TEXT = new Set(['text', 'span', 'p', 'h1']);
 const STYLE_KEYS = new Set(['color', 'backgroundColor', 'fontSize', 'fontWeight', 'padding', 'margin', 'width', 'height', 'borderRadius', 'textAlign']);
 
-export async function analyzeNativeScreen(entry: string, config?: ResolvedConfig): Promise<NativeScreen> {
+export async function analyzeNativeScreen(
+  entry: string,
+  config?: ResolvedConfig,
+  onSourcePaths?: (paths: readonly string[]) => void
+): Promise<NativeScreen> {
   if (!existsSync(entry)) throw nativeError(entry, '源文件不存在');
-  if (config) { const screen = composeNativeScreen(entry, config); if (screen) return screen; }
+  if (config) {
+    const screen = composeNativeScreen(entry, config, onSourcePaths);
+    if (screen) return screen;
+  }
   const ts = await loadTypescript();
-  const source = ts.createSourceFile(entry, readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
-  const component = source.statements.find((s): s is tsTypes.ClassDeclaration => ts.isClassDeclaration(s));
+  const source = ts.createSourceFile(
+    entry,
+    readFileSync(entry, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const component = source.statements.find((s): s is tsTypes.ClassDeclaration =>
+    ts.isClassDeclaration(s)
+  );
   if (!component) throw nativeError(entry, '未找到 Component 类');
   const state = readState(ts, component, entry);
   const actions = new Map<string, NativeAction>();
-  for (const member of component.members) if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name)) {
-    const action = readAction(ts, member, entry); if (action) actions.set(member.name.text, action);
-  }
-  const render = component.members.find((m): m is tsTypes.MethodDeclaration => ts.isMethodDeclaration(m) && m.name.getText(source) === 'render');
+  for (const member of component.members)
+    if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name)) {
+      const action = readAction(ts, member, entry);
+      if (action) actions.set(member.name.text, action);
+    }
+  const render = component.members.find(
+    (m): m is tsTypes.MethodDeclaration =>
+      ts.isMethodDeclaration(m) && m.name.getText(source) === 'render'
+  );
   const value = render?.body?.statements.find(ts.isReturnStatement)?.expression;
-  if (!value || !ts.isObjectLiteralExpression(value)) throw nativeError(entry, 'render() 必须返回静态 VNode 对象');
-  const root = readNode(ts, value, entry, new Set(state.map((item) => item.key)), actions);
-  if (root.kind !== 'container') throw nativeError(entry, '根节点必须是容器节点');
+  if (!value || !ts.isObjectLiteralExpression(value))
+    throw nativeError(entry, 'render() 必须返回静态 VNode 对象');
+  const root = readNode(
+    ts,
+    value,
+    entry,
+    new Set(state.map((item) => item.key)),
+    actions
+  );
+  if (root.kind !== 'container')
+    throw nativeError(entry, '根节点必须是容器节点');
   return { name: component.name?.text ?? 'App', state, root };
 }
 

@@ -29,19 +29,18 @@ export class FetchAdapter implements RequestAdapter {
     let externalAborted = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    const onExternalAbort = (): void => {
+      externalAborted = true;
+      controller.abort();
+    };
     if (config.signal) {
       if (config.signal.aborted) {
         externalAborted = true;
         controller.abort();
       } else {
-        config.signal.addEventListener(
-          'abort',
-          () => {
-            externalAborted = true;
-            controller.abort();
-          },
-          { once: true }
-        );
+        config.signal.addEventListener('abort', onExternalAbort, {
+          once: true,
+        });
       }
     }
 
@@ -102,6 +101,7 @@ export class FetchAdapter implements RequestAdapter {
         cause: error,
       });
     } finally {
+      config.signal?.removeEventListener('abort', onExternalAbort);
       if (timer !== undefined) {
         clearTimeout(timer);
       }

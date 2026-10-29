@@ -1,3 +1,4 @@
+import { CleanupErrors } from '../cleanup';
 import { ModelBindingController } from '../model';
 import { effect, ReactiveEffect, stop } from '../reactive';
 import {
@@ -79,27 +80,40 @@ export class ElementRenderStrategy<
         ? document.createElementNS(SVG_NAMESPACE, vnode.tag)
         : document.createElement(vnode.tag);
 
-    const props = vnode.props ?? {};
-    if (isNavigator) {
-      const { url: targetUrl, openType: _openType, ...restProps } = props;
-      const url = typeof targetUrl === 'string' ? targetUrl : '#';
-      element.setAttribute('href', url);
-      element.addEventListener('click', (event) => {
-        const router = getRouter();
-        if (router) {
-          event.preventDefault();
-          void router.push(element.getAttribute('href') ?? '#');
-        }
-      });
-      this.applyProps(element, {}, restProps, context);
-    } else {
-      this.applyProps(element, {}, props, context);
-    }
-    this.updateListeners(element, {}, this.collectListeners(vnode));
-    this.mountChildren(element, vnode, context);
-    this.applyDirections(element, undefined, vnode.directions, context);
+    try {
+      const props = vnode.props ?? {};
+      if (isNavigator) {
+        const { url: targetUrl, openType: _openType, ...restProps } = props;
+        const url = typeof targetUrl === 'string' ? targetUrl : '#';
+        element.setAttribute('href', url);
+        const listener: EventListener = (event) => {
+          const router = getRouter();
+          if (router) {
+            event.preventDefault();
+            void router.push(element.getAttribute('href') ?? '#');
+          }
+        };
+        element.addEventListener('click', listener);
+        this.listeners.set(
+          element,
+          new Map([['navigator', { eventName: 'click', listener }]])
+        );
+        this.applyProps(element, {}, restProps, context);
+      } else {
+        this.applyProps(element, {}, props, context);
+      }
+      this.updateListeners(element, {}, this.collectListeners(vnode));
+      this.mountChildren(element, vnode, context);
+      this.applyDirections(element, undefined, vnode.directions, context);
 
-    return element;
+      return element;
+    } catch (error) {
+      const errors = new CleanupErrors();
+      errors.add(error);
+      errors.attempt(() => this.unmount(vnode, element, context));
+      errors.throwIfAny('Element initialization and cleanup failed');
+      throw error;
+    }
   }
 
   public patch(
@@ -177,15 +191,22 @@ export class ElementRenderStrategy<
       return;
     }
 
-    this.effects.get(currentNode)?.forEach((item) => stop(item));
+    const errors = new CleanupErrors();
+    this.effects
+      .get(currentNode)
+      ?.forEach((item) => errors.attempt(() => stop(item)));
     this.effects.delete(currentNode);
-
     this.listeners.get(currentNode)?.forEach(({ eventName, listener }) => {
-      currentNode.removeEventListener(eventName, listener);
+      errors.attempt(() =>
+        currentNode.removeEventListener(eventName, listener)
+      );
     });
     this.listeners.delete(currentNode);
-    this.modelBindings.cleanup(currentNode as HTMLElement);
-    this.unmountChildren(currentNode, vnode, context);
+    errors.attempt(() =>
+      this.modelBindings.cleanup(currentNode as HTMLElement)
+    );
+    errors.attempt(() => this.unmountChildren(currentNode, vnode, context));
+    errors.throwIfAny('Element teardown failed');
   }
 
   protected mountChildren(
@@ -217,12 +238,16 @@ export class ElementRenderStrategy<
     vnode: TNode,
     context: RenderRuntimeContext
   ): void {
+    const childNodes = Array.from(element.childNodes);
+    const errors = new CleanupErrors();
     toChildren(vnode.children).forEach((child, index) => {
-      const childNode = element.childNodes[index];
-      if (childNode) {
-        context.renderer.unmount(child, childNode, context);
-      }
+      const childNode = childNodes[index];
+      if (childNode)
+        errors.attempt(() =>
+          context.renderer.unmount(child, childNode, context)
+        );
     });
+    errors.throwIfAny('Element children teardown failed');
   }
 
   private applyProps(
@@ -379,6 +404,7 @@ export class ElementRenderStrategy<
       element.appendChild(context.renderer.mount(newChildren[index], context));
     }
 
+    const errors = new CleanupErrors();
     for (
       let index = oldChildren.length - 1;
       index >= newChildren.length;
@@ -386,12 +412,15 @@ export class ElementRenderStrategy<
     ) {
       const childNode = element.childNodes[index];
       if (childNode) {
-        context.renderer.unmount(oldChildren[index], childNode, context);
-        if (childNode.parentNode === element) {
-          element.removeChild(childNode);
-        }
+        errors.attempt(() =>
+          context.renderer.unmount(oldChildren[index], childNode, context)
+        );
+        errors.attempt(() => {
+          if (childNode.parentNode === element) element.removeChild(childNode);
+        });
       }
     }
+    errors.throwIfAny('Removed element children teardown failed');
   }
 
   private updateKeyedChildren(
@@ -445,16 +474,21 @@ export class ElementRenderStrategy<
       }
     });
 
+    const errors = new CleanupErrors();
     oldEntries.forEach((entry) => {
       if (!entry.node || usedOldIndexes.has(entry.index)) {
         return;
       }
 
-      context.renderer.unmount(entry.vnode, entry.node, context);
-      if (entry.node.parentNode === element) {
-        element.removeChild(entry.node);
-      }
+      const node = entry.node;
+      errors.attempt(() =>
+        context.renderer.unmount(entry.vnode, node, context)
+      );
+      errors.attempt(() => {
+        if (node.parentNode === element) element.removeChild(node);
+      });
     });
+    errors.throwIfAny('Removed keyed children teardown failed');
   }
 
   private hasOnlyKeyedChildren(
@@ -533,19 +567,17 @@ export class ElementRenderStrategy<
         const isTextarea =
           typeof element.tagName === 'string' &&
           element.tagName.toLowerCase() === 'textarea';
-        const domEvent = eventName === 'confirm' && !isTextarea ? 'keydown' : eventName;
-        const listener = wrapEventHandler(
-          (domEventArg: Event) => {
-            if (domEvent === 'keydown') {
-              const key = (domEventArg as KeyboardEvent).key;
-              if (key !== 'Enter') {
-                return;
-              }
+        const domEvent =
+          eventName === 'confirm' && !isTextarea ? 'keydown' : eventName;
+        const listener = wrapEventHandler((domEventArg: Event) => {
+          if (domEvent === 'keydown') {
+            const key = (domEventArg as KeyboardEvent).key;
+            if (key !== 'Enter') {
+              return;
             }
-            newListeners[event](domEventArg);
-          },
-          modifiers
-        );
+          }
+          newListeners[event](domEventArg);
+        }, modifiers);
         element.addEventListener(domEvent, listener);
         store.set(event, { eventName: domEvent, listener });
       }

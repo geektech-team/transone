@@ -16,6 +16,7 @@ import type {
   ComponentIndex,
   ComponentIndexOptions,
   ComponentMetadata,
+  ComponentSelectionDecision,
   OwnedMember,
 } from './types';
 export type * from './types';
@@ -52,7 +53,7 @@ export function createComponentIndex(
   const parents = new Map<string, ClassReference>();
   const metadata = new Map<string, ComponentMetadata>();
   const component = new Map<string, boolean>();
-  const selected = new Map<string, ClassReference>();
+  const decisions = new Map<string, ComponentSelectionDecision>();
   const frameworkClasses = new Set<string>();
 
   // Module ownership/resolution establishes identity before looking at export names.
@@ -194,6 +195,7 @@ export function createComponentIndex(
       if (platform) platforms.add(platform);
     }
     metadata.set(reference.id, {
+      framework: frameworkSources.has(reference.source),
       parent: parents.get(reference.id),
       family: reference,
       platforms: [...platforms],
@@ -250,10 +252,7 @@ export function createComponentIndex(
     list.push(reference);
     candidates.set(data.family.id, list);
   }
-  const choose = (
-    reference: ClassReference,
-    requireConcrete = true
-  ): ClassReference => {
+  const decide = (reference: ClassReference): ComponentSelectionDecision => {
     const data = metadata.get(reference.id);
     if (
       !data ||
@@ -261,7 +260,12 @@ export function createComponentIndex(
       frameworkClasses.has(reference.id) ||
       data.platforms.length
     )
-      return reference;
+      return {
+        component: reference,
+        implementation: reference,
+        reason: 'explicit',
+        candidates: [],
+      };
     const available = candidates.get(reference.id) ?? [];
     const exact = available.filter((candidate) =>
       metadata.get(candidate.id)!.platforms.includes(options.platform)
@@ -275,15 +279,28 @@ export function createComponentIndex(
       throw new Error(
         `Conflicting implementations for ${reference.className} on ${options.platform}:\n${matches.map(location).join('\n')}`
       );
-    if (matches[0]) return matches[0];
-    if (data.abstract && requireConcrete)
-      throw new Error(
-        `Abstract component ${location(reference)} has no implementation for ${options.platform}. Candidates:\n${available.map(location).join('\n') || '(none)'}`
-      );
-    return reference;
+    return {
+      component: reference,
+      ...(matches[0]
+        ? { implementation: matches[0] }
+        : data.abstract
+          ? {}
+          : { implementation: reference }),
+      reason: matches[0]
+        ? exact.length
+          ? 'exact'
+          : 'family'
+        : data.abstract
+          ? 'missing'
+          : 'base',
+      candidates: available,
+    };
   };
   for (const reference of references)
-    selected.set(reference.id, choose(reference, false));
+    decisions.set(reference.id, decide(reference));
+
+  const decision = (reference: ClassReference) =>
+    decisions.get(reference.id) ?? decide(reference);
 
   const hierarchy = (reference: ClassReference): readonly ClassReference[] => {
     const result: ClassReference[] = [];
@@ -326,7 +343,15 @@ export function createComponentIndex(
     isComponent: (reference) =>
       !frameworkClasses.has(reference.id) &&
       (component.get(reference.id) ?? false),
-    select: (reference) => choose(reference),
+    select(reference) {
+      const result = decision(reference);
+      if (!result.implementation)
+        throw new Error(
+          `Abstract component ${location(reference)} has no implementation for ${options.platform}. Candidates:\n${result.candidates.map(location).join('\n') || '(none)'}`
+        );
+      return result.implementation;
+    },
+    decision,
     hierarchy,
     members(reference) {
       const effective = new Map<string, OwnedMember[]>();
@@ -358,8 +383,10 @@ export function createComponentIndex(
     },
     bindings: () =>
       references.flatMap((base) => {
-        const implementation = selected.get(base.id)!;
-        return implementation.id !== base.id ? [{ base, implementation }] : [];
+        const implementation = decisions.get(base.id)!.implementation;
+        return implementation && implementation.id !== base.id
+          ? [{ base, implementation }]
+          : [];
       }),
     metadata(reference) {
       const data = metadata.get(reference.id);

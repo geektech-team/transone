@@ -1,4 +1,9 @@
-import { build } from './build';
+import { build, buildConfigured } from './build';
+import {
+  reportConfiguredComponents,
+  formatComponentSelectionReport,
+} from './components/report';
+import { resolveConfig } from './config';
 import { createProject } from './create';
 import { startDevServer } from './server';
 import {
@@ -7,19 +12,23 @@ import {
   PLATFORM_DEFINITIONS,
 } from 'transone/platform';
 import { TARGET_TYPES } from './target/types';
-import type { TargetInput } from './types';
+import type { BuildOptions, BuildResult, TargetInput } from './types';
 
 const USAGE = [
   'Usage:',
   '  transone create',
   '  transone dev [--target <web|web-mobile|web-pc>] [--host <host>] [--port <port>] [--base <path>] [--no-watch]',
-  '  transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]',
+  '  transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library] [--report-components]',
   '',
   `Targets: ${PLATFORM_DEFINITIONS.map((definition) => definition.platform).join(', ')} (default: web)`,
   `Compatible backend aliases: ${TARGET_TYPES.filter((target) => target !== 'web').join(', ')}`,
 ].join('\n');
 
-const FLAG_OPTIONS = new Set(['--no-watch', '--library']);
+const FLAG_OPTIONS = new Set([
+  '--no-watch',
+  '--library',
+  '--report-components',
+]);
 
 export interface CreateCliArgs {
   command: 'create';
@@ -40,6 +49,7 @@ export interface BuildCliArgs {
   outDir?: string;
   base?: string;
   library?: boolean;
+  reportComponents?: boolean;
 }
 
 export type CliArgs = CreateCliArgs | DevCliArgs | BuildCliArgs;
@@ -66,6 +76,8 @@ export function parseCliArgs(argv: string[]): CliArgs {
       throw parseError(`Duplicate option: ${name}`);
     }
     if (FLAG_OPTIONS.has(name)) {
+      if (inlineValue !== undefined)
+        throw parseError(`Option ${name} does not accept a value`);
       options.set(name, 'true');
       continue;
     }
@@ -107,6 +119,12 @@ export function parseCliArgs(argv: string[]): CliArgs {
     };
   }
 
+  if (options.has('--library') && options.has('--report-components')) {
+    throw parseError(
+      'Option --report-components is not supported for library builds'
+    );
+  }
+
   return {
     command,
     ...(options.has('--target')
@@ -115,6 +133,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     ...(options.has('--out-dir') ? { outDir: options.get('--out-dir') } : {}),
     ...(options.has('--base') ? { base: options.get('--base') } : {}),
     ...(options.has('--library') ? { library: true } : {}),
+    ...(options.has('--report-components') ? { reportComponents: true } : {}),
   };
 }
 
@@ -146,19 +165,28 @@ export async function runCli(
     return;
   }
 
-  const result = await build(
+  const buildOptions: BuildOptions =
     args.outDir === undefined &&
-      args.base === undefined &&
-      !args.library &&
-      args.target === undefined
+    args.base === undefined &&
+    !args.library &&
+    args.target === undefined
       ? {}
       : {
           target: args.target,
           outDir: args.outDir,
           base: args.base,
           library: args.library,
-        }
-  );
+        };
+  let result: BuildResult;
+  if (args.reportComponents) {
+    const config = await resolveConfig(buildOptions);
+    console.log(
+      formatComponentSelectionReport(reportConfiguredComponents(config))
+    );
+    result = await buildConfigured(config, buildOptions);
+  } else {
+    result = await build(buildOptions);
+  }
   console.log(
     `TransOne build completed: ${result.outDir} (${result.assetsBuilt.length} assets)`
   );
@@ -183,6 +211,7 @@ function assertKnownOption(name: string): void {
     name === '--out-dir' ||
     name === '--no-watch' ||
     name === '--library' ||
+    name === '--report-components' ||
     name === '--base' ||
     name === '--target'
   ) {
@@ -208,7 +237,8 @@ function assertSupportedOption(
       (name === '--target' ||
         name === '--out-dir' ||
         name === '--base' ||
-        name === '--library'));
+        name === '--library' ||
+        name === '--report-components'));
 
   if (!supported) {
     throw parseError(`Option ${name} is not supported for ${command}`);

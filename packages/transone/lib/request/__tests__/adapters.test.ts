@@ -258,13 +258,16 @@ describe('MiniProgramAdapter（微信）', () => {
     });
 
     const promise = createAdapter('weixin').request({ url: '/x', timeout: 20 });
+    const rejection = expect(promise).rejects.toMatchObject({
+      code: 'TIMEOUT',
+    });
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(aborted).toBe(1);
 
     (captured.fail as (err: Record<string, unknown>) => void)({
       errMsg: 'request:fail abort',
     });
-    await expect(promise).rejects.toMatchObject({ code: 'TIMEOUT' });
+    await rejection;
   });
 
   it('signal 取消时 abort 底层任务', async () => {

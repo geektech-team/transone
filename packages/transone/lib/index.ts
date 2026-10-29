@@ -22,7 +22,7 @@ export function createApp<
 }
 
 // 导出框架名称和版本
-export const version = '0.8.0';
+export const version = '0.9.0';
 export const name = 'transone';
 
 export * from './platform';

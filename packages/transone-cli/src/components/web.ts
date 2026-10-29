@@ -90,6 +90,7 @@ export function createWebComponentContext(
   ) {
     return {
       active: false,
+      sourcePaths: files,
       entrypoint: entry,
       plugin: {
         name: 'transone-no-platform-components',
@@ -820,6 +821,7 @@ export function createWebComponentContext(
     },
   };
   return {
+    sourcePaths: index.sources.map((source) => source.fileName),
     active,
     entrypoint: active ? BOOT : entry,
     plugin,

@@ -198,7 +198,7 @@ export const cliCommandsPage: DocPage = {
       `Usage:
   transone create
   transone dev [--target <web|web-mobile|web-pc>] [--host <host>] [--port <port>] [--base <path>] [--no-watch]
-  transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]
+  transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library] [--report-components]
 
 Targets: web, web-mobile, web-pc, miniprogram-weixin, miniprogram-alipay, miniprogram-bytedance, miniprogram-xiaohongshu, app-ios, app-android, app-harmony
 兼容 mp-* / app-* 旧名称；默认 web。`
@@ -233,6 +233,7 @@ transone dev --base /transone/ --no-watch`),
         ['--out-dir <path>', 'dist/build/h5', '产物输出目录。'],
         ['--base <path>', '（空）', '部署子路径（GitHub Pages 场景）。'],
         ['--library', 'false', '库构建：产出 ESM bundle + .d.ts（需 config.library）。'],
+        ['--report-components', 'false', '应用构建前打印静态组件选择报告：源码位置、匹配原因及候选实现；不与 --library 组合。'],
       ]
     ),
     codeBlock('bash', `transone build --target web
@@ -242,7 +243,10 @@ transone build --target miniprogram-weixin
 transone build --target app-ios
 transone build --target mp-weixin --out-dir dist/mp-wx
 transone build --target web --base /transone/
-transone build --library`),
+transone build --library
+transone build --target web-pc --report-components`),
+    paragraph('组件报告描述静态发现的逻辑组件映射，不证明运行时可达性；未使用抽象类可显示 missing，不因此单独阻止报告。CLI 包导出的 reportComponents(options) 可只读获取结构化数据，再通过 formatComponentSelectionReport(report) 格式化。'),
+    paragraph('Web、小程序、App 与库构建先完成临时输出，成功后再切换目录；编译、渲染、写文件或复制失败会保留上一版完整产物。发布切换失败会恢复旧目录，无法恢复时保留备份并报告位置。生产构建只清理自身临时目录，开发服务器仍管理自身 session/generation。'),
   ],
 };
 

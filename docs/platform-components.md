@@ -81,6 +81,9 @@ export default defineConfig({
 
 ## 选择与继承
 
+使用 `transone build --target web-pc --report-components` 查看组件、实现来源与匹配原因。
+单独读取报告可调用 CLI 包的 `reportComponents`，详见[诊断与清理](./reliability.md)。
+
 选择优先级为：精确端实现 → 同族通用实现 → 可实例化业务基类。
 
 | 平台族 | 通用装饰器 | 适用目标 |

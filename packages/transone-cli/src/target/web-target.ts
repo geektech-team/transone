@@ -1,9 +1,14 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { isEntryJavaScriptOutput, isStylesheetOutput } from '../build-output';
 import { emitComponentStyles, emitDocumentStyles } from '../document-styles';
 import { assertSafeSubdirectoryDoesNotContain } from '../safe-path';
 import { buildWebBundle } from '../web-bundle';
+import {
+  buildInputPaths,
+  buildOutputPath,
+  withBuildOutput,
+} from '../output-transaction';
 import {
   createWebComponentContext,
   type WebComponentContext,
@@ -46,23 +51,52 @@ export class WebTarget implements BuildTarget {
         INVALID_OUTPUT_DIRECTORY_MESSAGE
       );
     }
-    // 动态加载：project.ts 依赖 'transone/dom'（框架 dist 的 DOM
-    // 渲染模块），仅在站点渲染路径需要。
-    const { renderProjectHtml } = await import('../project');
     const contexts = new Map(
       entries.map((entry) => [entry, createWebComponentContext(config, entry)])
     );
+    const protectedPaths = buildInputPaths(
+      config,
+      entries,
+      [...contexts.values()].flatMap((context) => context.sourcePaths)
+    );
+    return withBuildOutput(
+      {
+        root: config.root,
+        outDir: config.build.outDir,
+        protectedPaths,
+        requireProjectSubdirectory: true,
+      },
+      (outDir) =>
+        this.buildOutput(
+          { ...config, build: { ...config.build, outDir } },
+          contexts,
+          protectedPaths
+        )
+    );
+  }
+
+  private async buildOutput(
+    config: ResolvedConfig,
+    contexts: Map<string, WebComponentContext>,
+    protectedPaths: string[]
+  ): Promise<BuildResult> {
+    const entries = [...new Set(Object.values(config.pages))];
+    // 动态加载：project.ts 依赖 'transone/dom'（框架 dist 的 DOM
+    // 渲染模块），仅在站点渲染路径需要。
+    const { renderProjectHtml } = await import('../project');
     for (const [route, entry] of Object.entries(config.pages)) {
       await renderProjectHtml(config, {}, entry, route, contexts.get(entry));
     }
 
-    await rm(config.build.outDir, { recursive: true, force: true });
-    await mkdir(config.build.outDir, { recursive: true });
-
     const builtByEntry = new Map<string, BuiltPage>();
     const failures: string[] = [];
     for (const entry of entries) {
-      const built = await buildPage(config, entry, contexts.get(entry));
+      const built = await buildPage(
+        config,
+        entry,
+        contexts.get(entry),
+        protectedPaths
+      );
       if (typeof built === 'string') {
         failures.push(built);
         continue;
@@ -126,7 +160,8 @@ export class WebTarget implements BuildTarget {
 async function buildPage(
   config: ResolvedConfig,
   entry: string,
-  components?: WebComponentContext
+  components?: WebComponentContext,
+  protectedPaths: string[] = []
 ): Promise<BuiltPage | string> {
   let result: Awaited<ReturnType<typeof buildWebBundle>>['result'];
   let styles: ReadonlyMap<string, string>;
@@ -144,6 +179,7 @@ async function buildPage(
       },
       components
     );
+    protectedPaths.push(...bundle.inputPaths);
     result = bundle.result;
     styles = bundle.styles;
   } catch (error: unknown) {
@@ -210,13 +246,13 @@ function buildFailure(failures: string[]): Error {
 
 function htmlPath(config: ResolvedConfig, route: string): string {
   if (route === '/') {
-    return resolve(config.build.outDir, 'index.html');
+    return buildOutputPath(config.build.outDir, 'index.html');
   }
   const relativeRoute = route.replace(/^\/+/, '');
   if (config.build.directoryPages) {
-    return resolve(config.build.outDir, relativeRoute, 'index.html');
+    return buildOutputPath(config.build.outDir, `${relativeRoute}/index.html`);
   }
-  return resolve(config.build.outDir, `${relativeRoute}.html`);
+  return buildOutputPath(config.build.outDir, `${relativeRoute}.html`);
 }
 
 function toAssetUrl(

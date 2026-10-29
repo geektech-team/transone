@@ -14,10 +14,21 @@ export interface OwnedMember {
   declaration: ts.ClassElement;
 }
 export interface ComponentMetadata {
+  /** Declared by the framework package rather than a business component module. */
+  framework: boolean;
   parent?: ClassReference;
   family: ClassReference;
   platforms: readonly ComponentPlatform[];
   abstract: boolean;
+}
+export type ComponentSelectionReason =
+  'exact' | 'family' | 'base' | 'missing' | 'explicit';
+/** The shared matcher's static decision; missing abstract bases are inspectable. */
+export interface ComponentSelectionDecision {
+  component: ClassReference;
+  implementation?: ClassReference;
+  reason: ComponentSelectionReason;
+  candidates: readonly ClassReference[];
 }
 export interface ComponentIndex {
   readonly platform: Platform;
@@ -30,6 +41,8 @@ export interface ComponentIndex {
   findClass(filePath: string, className: string): ClassReference | undefined;
   isComponent(reference: ClassReference): boolean;
   select(reference: ClassReference): ClassReference;
+  /** Does not reject a missing abstract implementation; conflicts still throw. */
+  decision(reference: ClassReference): ComponentSelectionDecision;
   hierarchy(reference: ClassReference): readonly ClassReference[];
   members(reference: ClassReference): readonly OwnedMember[];
   bindings(): readonly {

@@ -255,3 +255,9 @@ bun run lint
 ## License
 
 MIT
+
+## Resource cleanup
+
+Web runtime components can register owned resources with `this.onDispose(cleanup)`, in registration order, and unregister using its return value. Teardown continues after throwing hooks, children or disposers; repeated unmounts do not repeat cleanup. Single errors retain their identity; multiple errors retain their `errors` collection.
+Request completion releases external abort listeners and timers, including Mini Program hosts whose abort does not invoke a callback.
+See the [cleanup guide and static compilation boundaries](../../docs/reliability.md).

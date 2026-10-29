@@ -43,7 +43,7 @@ export async function assertSafeSubdirectoryDoesNotContain(
   }
 }
 
-async function canonicalizePotentialPath(path: string): Promise<string> {
+export async function canonicalizePotentialPath(path: string): Promise<string> {
   const ancestor = await findExistingAncestor(path);
   const canonicalAncestor = await realpath(ancestor);
   return resolve(canonicalAncestor, relative(ancestor, path));

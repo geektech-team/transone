@@ -79,22 +79,64 @@ export class MiniProgramAdapter implements RequestAdapter {
     const requestFn = api.request;
 
     return new Promise<RequestResponse<T>>((resolve, reject) => {
-      let timedOut = false;
+      let cancellation: 'TIMEOUT' | 'ABORTED' | undefined;
       let settled = false;
+      let abortAttempted = false;
       let task: { abort?: () => void } | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
-      // 保证成功/失败/超时只结算一次，并清理超时 timer
+      const networkError = (error: unknown): RequestError =>
+        new RequestError({
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : String(error),
+          config,
+          cause: error,
+        });
+      // Settle independently of host abort callbacks and detach shared signals
+      // before invoking user-visible resolution or a potentially synchronous abort.
       const settle = (fn: () => void): void => {
-        if (settled) {
-          return;
-        }
+        if (settled) return;
         settled = true;
-        if (timer !== undefined) {
-          clearTimeout(timer);
+        if (timer !== undefined) clearTimeout(timer);
+        config.signal?.removeEventListener('abort', onExternalAbort);
+        try {
+          fn();
+        } catch (error) {
+          reject(networkError(error));
         }
-        fn();
       };
+      const abortTask = (): void => {
+        if (!task || abortAttempted) return;
+        abortAttempted = true;
+        try {
+          task.abort?.();
+        } catch {
+          // Cancellation has already settled with its original TIMEOUT/ABORTED code.
+        }
+      };
+      const cancel = (code: 'TIMEOUT' | 'ABORTED'): void => {
+        if (settled) return;
+        cancellation = code;
+        settle(() =>
+          reject(
+            new RequestError({
+              code,
+              message:
+                code === 'TIMEOUT'
+                  ? `Request timeout after ${String(config.timeout)}ms`
+                  : 'Request aborted',
+              config,
+            })
+          )
+        );
+        abortTask();
+      };
+      const onExternalAbort = (): void => cancel('ABORTED');
+
+      if (config.signal?.aborted) {
+        cancel('ABORTED');
+        return;
+      }
 
       const options: Record<string, unknown> = {
         url: buildURL(config.baseURL, config.url, config.params),
@@ -132,7 +174,7 @@ export class MiniProgramAdapter implements RequestAdapter {
             const errMsg = extractFailMessage(err);
             reject(
               new RequestError({
-                code: timedOut ? 'TIMEOUT' : classifyMpError(errMsg),
+                code: classifyMpError(errMsg),
                 message: errMsg || 'Network request failed',
                 config,
                 cause: err,
@@ -142,27 +184,16 @@ export class MiniProgramAdapter implements RequestAdapter {
         },
       };
 
+      config.signal?.addEventListener('abort', onExternalAbort, { once: true });
       if (config.timeout !== undefined && config.timeout > 0) {
-        timer = setTimeout(() => {
-          timedOut = true;
-          task?.abort?.();
-        }, config.timeout);
+        timer = setTimeout(() => cancel('TIMEOUT'), config.timeout);
       }
-
-      task = requestFn(options) ?? undefined;
-
-      if (config.signal) {
-        if (config.signal.aborted) {
-          task?.abort?.();
-        } else {
-          config.signal.addEventListener(
-            'abort',
-            () => {
-              task?.abort?.();
-            },
-            { once: true }
-          );
-        }
+      try {
+        task = requestFn(options) ?? undefined;
+        // A host may synchronously abort the external signal before returning its task.
+        if (cancellation) abortTask();
+      } catch (error) {
+        settle(() => reject(networkError(error)));
       }
     });
   }

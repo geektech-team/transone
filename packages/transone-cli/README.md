@@ -185,3 +185,11 @@ Native app builds write `{ host }` to `transone.config.json` in the platform res
 Native request compilation is not yet supported; this file is configuration for future integration.
 
 Weixin builds default to `lazyCodeLoading: "requiredComponents"` in `app.json` (component injection on demand). Override it through `mp.appExtra.lazyCodeLoading` or the platform-specific `appExtra`.
+
+## Component diagnostics and recoverable output
+
+Run `transone build --target web-pc --report-components` to print discovered logical-component mappings, source locations, exact/family/base/missing reasons, and candidates. This is a static mapping report, not runtime reachability analysis; it cannot be combined with `--library`.
+Use `reportComponents(options)` and `formatComponentSelectionReport(report)` from `transone-cli` for structured data and text without evaluating component modules or writing build output.
+
+Web, Mini Program, App and library builds complete their staging output before replacing the destination. Failures preserve previous output, publication failures attempt rollback, and cleanup only removes paths owned by that build.
+See the [diagnostics and cleanup guide](../../docs/reliability.md).

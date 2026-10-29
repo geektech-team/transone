@@ -1,5 +1,15 @@
 export { defineConfig, resolveConfig } from './config';
 export { build } from './build';
+export {
+  reportComponents,
+  formatComponentSelectionReport,
+} from './components/report';
+export type {
+  ComponentReportLocation,
+  ComponentReportCandidate,
+  ComponentSelectionReportRow,
+  ComponentSelectionReport,
+} from './components/report';
 export { createProject } from './create';
 export type { CreateProjectOptions, CreateProjectResult } from './create';
 export { startDevServer } from './server';

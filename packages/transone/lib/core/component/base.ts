@@ -1,3 +1,4 @@
+import { CleanupErrors } from '../cleanup';
 import { StyleManager } from '../../style/StyleManager';
 import {
   ReactiveEffect,
@@ -64,6 +65,9 @@ export abstract class Component<
   private readonly providers = new Map<string | symbol, unknown>();
   private readonly updateEffect: ReactiveEffect;
   private appContext: unknown = null;
+  private disposed = false;
+  private unmounting = false;
+  private readonly disposers = new Set<() => void>();
   private parentComponent: ComponentInstance | null = null;
   private elementChangeListener:
     ((previousElement: Node, nextElement: Node) => void) | null = null;
@@ -114,8 +118,11 @@ export abstract class Component<
     try {
       container.appendChild(this.mountToNode());
     } catch (error) {
+      const errors = new CleanupErrors();
+      errors.add(error);
+      errors.attempt(() => this.unmount());
       console.error('组件渲染错误:', error);
-      throw error;
+      errors.throwIfAny('Component mount and cleanup failed');
     }
   }
 
@@ -124,31 +131,45 @@ export abstract class Component<
       return this.el;
     }
 
-    this.beforeMount();
-    // 渲染与挂载在组件自身 effect 上下文中执行，避免子组件渲染
-    // 把 state 依赖收集到父组件的 effect 上（跨组件依赖污染）。
-    this.el = ReactiveSystem.getInstance().runWithEffect(
-      this.updateEffect,
-      () => {
-        try {
+    if (this.unmounting) {
+      throw new Error('Cannot mount a component during teardown');
+    }
+
+    try {
+      if (this.disposed) {
+        this.disposed = false;
+        this.updateEffect.active = true;
+        this.initStyles();
+      }
+      this.beforeMount();
+      // Render under the component's own effect, including descendant initialization.
+      this.el = ReactiveSystem.getInstance().runWithEffect(
+        this.updateEffect,
+        () => {
           this.vnode = this.render();
           return this.renderer.mount(this.vnode, this.createRenderContext());
-        } catch (error) {
-          // 渲染或子组件挂载失败：先交给祖先错误边界，未处理才向外抛出
-          if (this.dispatchError(error)) {
-            return document.createComment('error-boundary');
-          }
-          throw error;
         }
-      }
-    );
-    this.mounted = true;
-    this.onMounted();
-    return this.el;
+      );
+      this.mounted = true;
+      this.onMounted();
+      return this.el;
+    } catch (error) {
+      // Resolve the boundary while the parent chain is still intact, then release
+      // all resources created by this failed attempt (including constructor styles).
+      const errors = new CleanupErrors();
+      let handled = false;
+      errors.attempt(() => {
+        handled = this.dispatchError(error);
+      });
+      if (!handled) errors.add(error);
+      errors.attempt(() => this.unmount());
+      errors.throwIfAny('Component mount and cleanup failed');
+      return document.createComment('error-boundary');
+    }
   }
 
   public update(): void {
-    if (!this.el || !this.vnode) {
+    if (this.unmounting || this.disposed || !this.el || !this.vnode) {
       return;
     }
 
@@ -177,37 +198,71 @@ export abstract class Component<
     this.onPropsChange();
   }
 
+  /**
+   * Teardown order: beforeUnmount, descendants, FIFO disposers, framework
+   * bindings/styles/effect, DOM and references, then onUnmounted. Every stage
+   * runs even after failures; repeated/reentrant calls do nothing.
+   */
   public unmount(): void {
-    if (!this.mounted) {
-      return;
-    }
+    if (this.disposed || this.unmounting) return;
+    this.unmounting = true;
+    this.disposed = true;
+    const wasMounted = this.mounted;
+    const errors = new CleanupErrors();
 
-    this.beforeUnmount();
-
+    if (wasMounted) errors.attempt(() => this.beforeUnmount());
     if (this.vnode && this.el) {
-      this.renderer.unmount(this.vnode, this.el, this.createRenderContext());
+      errors.attempt(() =>
+        this.renderer.unmount(this.vnode!, this.el!, this.createRenderContext())
+      );
     }
-
+    // Also release partially registered descendants that never returned a DOM node.
+    for (const child of Array.from(this.childComponents)) {
+      errors.attempt(() => child.unmount());
+      errors.attempt(() => child.setParentComponent?.(null));
+    }
     this.childComponents.clear();
-    Object.keys(this.eventListeners).forEach((eventName) => {
+    for (const cleanup of Array.from(this.disposers)) {
+      if (this.disposers.delete(cleanup)) errors.attempt(cleanup);
+    }
+    for (const eventName of Object.keys(this.eventListeners)) {
       this.eventListeners[eventName].clear();
       delete this.eventListeners[eventName];
-    });
+    }
     this.providers.clear();
     this.parentComponent = null;
     this.elementChangeListener = null;
-    this.templateEngine.clearBindings();
-    this.styleManager.destroy();
-    stop(this.updateEffect);
-
-    if (this.el?.parentNode) {
-      this.el.parentNode.removeChild(this.el);
-    }
-
+    this.appContext = null;
+    errors.attempt(() => this.templateEngine.clearBindings());
+    errors.attempt(() => this.styleManager.destroy());
+    errors.attempt(() => stop(this.updateEffect));
+    errors.attempt(() => this.el?.parentNode?.removeChild(this.el));
     this.el = null;
     this.vnode = null;
     this.mounted = false;
-    this.onUnmounted();
+    if (wasMounted) errors.attempt(() => this.onUnmounted());
+    this.unmounting = false;
+    errors.throwIfAny('Component teardown failed');
+  }
+
+  /**
+   * Register instance-owned resources (timers, subscriptions, cancellation).
+   * Callbacks run once, in registration order, after descendants. The returned
+   * function unregisters without running the callback. Registrations during or
+   * after teardown run immediately; a later mount starts a fresh resource scope.
+   * An immediate callback's error is thrown to its caller.
+   */
+  protected onDispose(cleanup: () => void): () => void {
+    if (this.disposed || this.unmounting) {
+      cleanup();
+      return () => {};
+    }
+    // A distinct wrapper allows the same callback to own multiple resources.
+    const dispose = () => cleanup();
+    this.disposers.add(dispose);
+    return () => {
+      this.disposers.delete(dispose);
+    };
   }
 
   public setProps(props: Partial<TProps>): void {

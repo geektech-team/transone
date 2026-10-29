@@ -1,3 +1,4 @@
+import { CleanupErrors } from './cleanup';
 import { createComponentInstance } from '../platform/bindings';
 import {
   Component,
@@ -70,6 +71,7 @@ export class OneApp<
   private container: HTMLElement | null = null;
   private rootInstance: Component | null = null;
   private mounted: boolean = false;
+  private unmounting = false;
   private templateEngine: TemplateEngine | null = null;
   private readonly appContext: AppContext<TConfig>;
   private readonly providers = new Map<string | symbol, unknown>();
@@ -80,7 +82,7 @@ export class OneApp<
   constructor(private options: AppOptions<TState, TConfig, TRootProps> = {}) {
     this.appContext = {
       app: this as unknown as OneApp,
-      version: '0.8.0',
+      version: '0.9.0',
       config: options.config || ({} as TConfig),
     };
   }
@@ -125,7 +127,7 @@ export class OneApp<
    * 挂载应用
    */
   public mount(): void {
-    if (this.mounted) {
+    if (this.unmounting || this.mounted) {
       console.warn('应用已经处于运行状态');
       return;
     }
@@ -169,7 +171,22 @@ export class OneApp<
       // 触发生命周期钩子
       this.onMounted();
     } catch (error) {
-      this.handleError(error as Error);
+      const errors = new CleanupErrors();
+      errors.add(error);
+      this.unmounting = true;
+      this.teardown(errors);
+      this.unmounting = false;
+      try {
+        errors.throwIfAny('App mount and cleanup failed');
+      } catch (failure) {
+        // Keep the error UI without retaining a failed app's container/resources.
+        this.container = mountContainer;
+        try {
+          this.handleError(failure as Error);
+        } finally {
+          this.container = null;
+        }
+      }
     }
   }
 
@@ -177,43 +194,48 @@ export class OneApp<
    * 卸载应用
    */
   public unmount(): void {
-    if (!this.mounted) {
+    if (this.unmounting) return;
+    if (
+      !this.mounted &&
+      !this.rootInstance &&
+      !this.container &&
+      !this.templateEngine
+    ) {
       console.warn('应用未处于运行状态');
       return;
     }
-
+    this.unmounting = true;
+    const errors = new CleanupErrors();
+    this.teardown(errors);
+    this.unmounting = false;
     try {
-      // 触发卸载前钩子
-      this.onBeforeUnmount();
-
-      if (this.rootInstance) {
-        // 调用组件卸载方法
-        if ('unmount' in this.rootInstance) {
-          this.rootInstance.unmount();
-        }
-
-        this.rootInstance = null;
-        this.mounted = false;
-        delete (globalThis as { __APP__?: unknown }).__APP__;
-      }
-
-      // 清除模板引擎
-      if (this.templateEngine) {
-        this.templateEngine.clearBindings();
-        this.templateEngine = null;
-      }
-
-      // 清空容器
-      if (this.container) {
-        this.container.innerHTML = '';
-      }
-
-      // 触发卸载后钩子
-      if (this.unmountedCallback) {
-        this.unmountedCallback();
-      }
+      errors.throwIfAny('App teardown failed');
     } catch (error) {
+      // Preserve the existing void/logging API while retaining every failure.
       console.error('Failed to unmount app:', error);
+    }
+  }
+
+  private teardown(errors: CleanupErrors): void {
+    for (const { plugin } of this.plugins) {
+      errors.attempt(() => plugin.onBeforeUnmount?.(this as unknown as OneApp));
+    }
+    this.releaseResources(errors);
+    if (this.unmountedCallback) errors.attempt(this.unmountedCallback);
+  }
+
+  private releaseResources(errors: CleanupErrors): void {
+    errors.attempt(() => this.rootInstance?.unmount());
+    this.rootInstance = null;
+    errors.attempt(() => this.templateEngine?.clearBindings());
+    this.templateEngine = null;
+    errors.attempt(() => {
+      if (this.container) this.container.innerHTML = '';
+    });
+    this.container = null;
+    this.mounted = false;
+    if ((globalThis as { __APP__?: unknown }).__APP__ === this) {
+      delete (globalThis as { __APP__?: unknown }).__APP__;
     }
   }
 
@@ -434,15 +456,6 @@ export class OneApp<
     this.plugins.forEach(({ plugin: pluginObj }) => {
       if (pluginObj && typeof pluginObj.onUpdated === 'function') {
         pluginObj.onUpdated(this as unknown as OneApp);
-      }
-    });
-  }
-
-  private onBeforeUnmount(): void {
-    // 触发插件的beforeUnmount钩子
-    this.plugins.forEach(({ plugin: pluginObj }) => {
-      if (pluginObj && typeof pluginObj.onBeforeUnmount === 'function') {
-        pluginObj.onBeforeUnmount(this as unknown as OneApp);
       }
     });
   }

@@ -52,8 +52,14 @@ it('creates a component-family example with commands for each supported platform
   const manifest = JSON.parse(
     readFileSync(join(directory, 'package.json'), 'utf8')
   );
-  expect(manifest.dependencies.transone).toBe('^0.5.0');
-  expect(manifest.devDependencies['transone-cli']).toBe('^0.8.0');
+  const frameworkPackage = JSON.parse(
+    readFileSync(resolve(import.meta.dir, '../../transone/package.json'), 'utf8')
+  );
+  const cliPackage = JSON.parse(
+    readFileSync(resolve(import.meta.dir, '../package.json'), 'utf8')
+  );
+  expect(manifest.dependencies.transone).toBe(`^${frameworkPackage.version}`);
+  expect(manifest.devDependencies['transone-cli']).toBe(`^${cliPackage.version}`);
   expect(manifest.scripts['dev:mobile']).toBe(
     'transone dev --target web-mobile'
   );

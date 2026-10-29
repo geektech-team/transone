@@ -1,3 +1,4 @@
+import { CleanupErrors } from './cleanup';
 import type {
   ComponentEventListener,
   ComponentProps,
@@ -136,21 +137,29 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
       this.createProps(vnode)
     );
 
-    if (context.appContext && instance.setAppContext) {
-      instance.setAppContext(context.appContext);
+    try {
+      if (context.appContext && instance.setAppContext) {
+        instance.setAppContext(context.appContext);
+      }
+      this.syncEmitters(instance, vnode.emitters ?? {});
+      context.registerChild(instance);
+      const node = instance.mountToNode();
+      this.trackInstanceNode(instance, node);
+      instance.setElementChangeListener?.((previousNode, nextNode) => {
+        this.trackInstanceNode(instance, previousNode);
+        this.trackInstanceNode(instance, nextNode);
+      });
+      return node;
+    } catch (error) {
+      const errors = new CleanupErrors();
+      errors.add(error);
+      errors.attempt(() => this.clearEmitters(instance));
+      errors.attempt(() => instance.unmount());
+      this.clearInstanceNodes(instance);
+      errors.attempt(() => context.unregisterChild(instance));
+      errors.throwIfAny('Child initialization and cleanup failed');
+      throw error;
     }
-
-    this.syncEmitters(instance, vnode.emitters ?? {});
-
-    context.registerChild(instance);
-
-    const node = instance.mountToNode();
-    this.trackInstanceNode(instance, node);
-    instance.setElementChangeListener?.((previousNode, nextNode) => {
-      this.trackInstanceNode(instance, previousNode);
-      this.trackInstanceNode(instance, nextNode);
-    });
-    return node;
   }
 
   public patch(
@@ -162,6 +171,7 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
     if (currentNode.nodeType === Node.COMMENT_NODE) {
       const nextNode = this.mount(newVNode, context);
       currentNode.parentNode?.replaceChild(nextNode, currentNode);
+      this.unmount(oldVNode, currentNode, context);
       return nextNode;
     }
 
@@ -195,10 +205,12 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
   ): void {
     const instance = this.instances.get(currentNode);
     if (instance) {
-      this.clearEmitters(instance);
-      instance.unmount();
+      const errors = new CleanupErrors();
+      errors.attempt(() => this.clearEmitters(instance));
+      errors.attempt(() => instance.unmount());
       this.clearInstanceNodes(instance);
-      context.unregisterChild(instance);
+      errors.attempt(() => context.unregisterChild(instance));
+      errors.throwIfAny('Child teardown failed');
     }
   }
 
@@ -238,10 +250,12 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
   }
 
   private clearEmitters(instance: ComponentInstance): void {
+    const errors = new CleanupErrors();
     this.emitterUnsubscribers.get(instance)?.forEach(({ unsubscribe }) => {
-      unsubscribe();
+      errors.attempt(unsubscribe);
     });
     this.emitterUnsubscribers.delete(instance);
+    errors.throwIfAny('Component emitter cleanup failed');
   }
 
   private trackInstanceNode(instance: ComponentInstance, node: Node): void {
@@ -276,12 +290,20 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
 
     const slotContainer = document.createElement('div');
     slotContainer.setAttribute('data-slot', vnode.props.name);
-    this.mountSlotChildren(
-      slotContainer,
-      this.resolveChildren(vnode, context),
-      context
-    );
-    return slotContainer;
+    try {
+      this.mountSlotChildren(
+        slotContainer,
+        this.resolveChildren(vnode, context),
+        context
+      );
+      return slotContainer;
+    } catch (error) {
+      const errors = new CleanupErrors();
+      errors.add(error);
+      errors.attempt(() => this.unmount(vnode, slotContainer, context));
+      errors.throwIfAny('Slot initialization and cleanup failed');
+      throw error;
+    }
   }
 
   public patch(
@@ -319,8 +341,10 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
       return;
     }
 
-    this.unmountSlotChildren(currentNode, context);
+    const errors = new CleanupErrors();
+    errors.attempt(() => this.unmountSlotChildren(currentNode, context));
     this.renderedChildren.delete(currentNode);
+    errors.throwIfAny('Slot teardown failed');
   }
 
   private resolveChildren(
@@ -362,6 +386,7 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
       element.appendChild(context.renderer.mount(newChildren[index], context));
     }
 
+    const errors = new CleanupErrors();
     for (
       let index = oldChildren.length - 1;
       index >= newChildren.length;
@@ -369,14 +394,17 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
     ) {
       const childNode = element.childNodes[index];
       if (childNode) {
-        context.renderer.unmount(oldChildren[index], childNode, context);
-        if (childNode.parentNode === element) {
-          element.removeChild(childNode);
-        }
+        errors.attempt(() =>
+          context.renderer.unmount(oldChildren[index], childNode, context)
+        );
+        errors.attempt(() => {
+          if (childNode.parentNode === element) element.removeChild(childNode);
+        });
       }
     }
 
     this.renderedChildren.set(element, newChildren);
+    errors.throwIfAny('Removed slot children teardown failed');
   }
 
   private mountSlotChildren(
@@ -384,10 +412,12 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
     children: Array<VNode | string>,
     context: RenderRuntimeContext
   ): void {
+    const mountedChildren: Array<VNode | string> = [];
+    this.renderedChildren.set(element, mountedChildren);
     children.forEach((child) => {
       element.appendChild(context.renderer.mount(child, context));
+      mountedChildren.push(child);
     });
-    this.renderedChildren.set(element, children);
   }
 
   private unmountSlotChildren(
@@ -395,11 +425,15 @@ export class SlotRenderStrategy implements RenderStrategy<SlotProvider> {
     context: RenderRuntimeContext
   ): void {
     const children = this.renderedChildren.get(element) ?? [];
+    const childNodes = Array.from(element.childNodes);
+    const errors = new CleanupErrors();
     children.forEach((child, index) => {
-      const childNode = element.childNodes[index];
-      if (childNode) {
-        context.renderer.unmount(child, childNode, context);
-      }
+      const childNode = childNodes[index];
+      if (childNode)
+        errors.attempt(() =>
+          context.renderer.unmount(child, childNode, context)
+        );
     });
+    errors.throwIfAny('Slot children teardown failed');
   }
 }

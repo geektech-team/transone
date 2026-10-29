@@ -71,3 +71,11 @@ bun run --cwd playground/counter build:xiaohongshu
 - 在线文档（CLI 子站）：<https://geektech-team.github.io/transone/cli/>
 - 主文档站：<https://geektech-team.github.io/transone/>
 - 仓库：<https://github.com/geektech-team/transone>
+
+## 组件诊断与输出恢复
+
+`transone build --target web-pc --report-components` 输出静态组件选择报告，包含来源位置、精确匹配/通用平台族/基类回退以及候选实现。报告覆盖发现的逻辑组件，不代表运行时可达性，不与 `--library` 组合。
+CLI 包的 `reportComponents(options)` 可单独读取结构化报告，`formatComponentSelectionReport(report)` 提供文本格式；只读检查不会执行组件模块或写入产物。
+
+Web、小程序、App 与库构建在临时目录完整生成成功后再切换输出。失败保留旧产物，切换失败尝试回滚；只清理本次拥有的工作目录。
+详见[诊断与清理](../../docs/reliability.md)。

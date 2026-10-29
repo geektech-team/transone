@@ -178,7 +178,8 @@ function validateStaticMetadata(expression: ts.Expression): void {
 /** Returns undefined only for the legacy plain-class fixture format. */
 export function composeNativeScreen(
   entry: string,
-  config: ResolvedConfig
+  config: ResolvedConfig,
+  onSourcePaths?: (paths: readonly string[]) => void
 ): NativeScreen | undefined {
   const index = createComponentIndex({
     root: config.root,
@@ -186,6 +187,7 @@ export function composeNativeScreen(
     platform: config.platform,
     ...config.components,
   });
+  onSourcePaths?.(index.sources.map((source) => source.fileName));
   const source = index.sources.find(
     (s) => realpathSync(s.fileName) === realpathSync(entry)
   );

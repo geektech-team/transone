@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -10,6 +10,11 @@ import { createComponentIndex } from '../components';
 import { findRootClass } from './analyze';
 import { compileUnit, finalizeComponentProperties } from './compile';
 import { generatePageJs, generateComponentJs } from './jsgen';
+import {
+  buildInputPaths,
+  buildOutputPath,
+  withBuildOutput,
+} from '../output-transaction';
 
 const GENERATED_COMMENT = (dialectId: string): string =>
   `由 transone build --target ${dialectId} 生成，请勿手动编辑`;
@@ -61,13 +66,31 @@ export async function buildMiniProgram(
     console.warn(`[transone mp] ${warning}`);
   }
 
-  const outDir = mp.outDir;
-  await rm(outDir, { recursive: true, force: true });
-  await mkdir(outDir, { recursive: true });
+  return withBuildOutput(
+    {
+      root: config.root,
+      outDir: mp.outDir,
+      protectedPaths: buildInputPaths(config, Object.values(mp.pages), [
+        mp.publicDir,
+        ...context.index!.sources.map((source) => source.fileName),
+        ...context.files.keys(),
+      ]),
+    },
+    (outDir) => writeMiniProgram(config, dialect, outDir, pages, context)
+  );
+}
 
+async function writeMiniProgram(
+  config: ResolvedConfig,
+  dialect: MpDialect,
+  outDir: string,
+  pages: Array<{ route: string; unit: CompiledUnit }>,
+  context: CompileContext
+): Promise<BuildResult> {
+  const mp = config.mp!;
   const assetsBuilt: string[] = [];
   const write = async (path: string, content: string): Promise<void> => {
-    const target = join(outDir, path);
+    const target = buildOutputPath(outDir, path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, content, 'utf8');
     assetsBuilt.push(target);
@@ -192,7 +215,7 @@ export async function buildMiniProgram(
   // 上面生成文件已写完，public 仅补产物中不存在的内容：避免覆盖生成文件。
   if (existsSync(mp.publicDir)) {
     for (const file of await listFiles(mp.publicDir)) {
-      const target = join(outDir, file);
+      const target = buildOutputPath(outDir, file);
       if (!existsSync(target)) {
         await cp(join(mp.publicDir, file), target, {
           recursive: true,

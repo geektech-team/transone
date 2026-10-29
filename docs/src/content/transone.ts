@@ -316,6 +316,12 @@ export const coreConceptsPage: DocPage = {
         ['onErrorCaptured', '后代渲染/更新出错时（错误边界）'],
       ]
     ),
+    paragraph('Web 组件可用 this.onDispose(cleanup) 登记自己拥有的定时器、订阅或请求取消，返回的函数可撤销登记。卸载按注册顺序释放资源；即使钩子、子组件或某项清理抛错，也继续清理其余资源。单个异常保留原对象，多个异常汇总并保留 errors；重复或重入卸载不重复执行清理。'),
+    codeBlock('typescript', `protected onMounted(): void {
+  const timer = setInterval(() => this.refresh(), 30_000);
+  this.onDispose(() => clearInterval(timer));
+}`),
+    paragraph('挂载中途失败也会释放已创建资源。应用清理只解除自身拥有的全局实例引用；请求结束后移除外部取消监听和定时器。此处为 Web 组件运行时契约，小程序和原生 App 源码仍受各端静态编译子集约束。'),
     heading(2, '策略化渲染'),
     paragraph(
       '渲染层按 VNode 类型分发到不同策略：文本、元素、组件与插槽各自有独立的渲染/更新/卸载实现。新增渲染行为优先扩展或拆分 Strategy，而不是把逻辑堆进单个大函数——这是项目的 OOP + 策略模式 + SOLID 约束。',

@@ -1,5 +1,6 @@
 import { createWebStylesPlugin } from './web-styles';
-import { resolve } from 'node:path';
+import { buildOutputPath } from './output-transaction';
+import { createBundleInputTracker } from './bundle-inputs';
 import type { WebComponentContext } from './components/web';
 
 /** Persist only the final bundle, retaining runtime cascade for shared selectors. */
@@ -9,12 +10,15 @@ export async function buildWebBundle(
 ) {
   // Omitting outdir is Bun's supported in-memory build mode.
   const { outdir, ...inMemoryOptions } = options;
+  const inputs = createBundleInputTracker();
   let stylesPlugin = createWebStylesPlugin(new Set(), components?.transform);
   const buildOptions = {
     ...inMemoryOptions,
+    metafile: true,
     ...(components?.active ? { entrypoints: [components.entrypoint] } : {}),
   };
   const plugins = () => [
+    inputs.plugin,
     ...(inMemoryOptions.plugins ?? []),
     ...(components?.active ? [components.plugin] : []),
     stylesPlugin,
@@ -34,7 +38,7 @@ export async function buildWebBundle(
   const outputs: { path: string; kind: string; type: string }[] = [];
   if (result.success) {
     for (const output of result.outputs) {
-      const path = resolve(outdir, output.path);
+      const path = buildOutputPath(outdir, output.path);
       const contents = await output.arrayBuffer();
       await Bun.write(path, contents);
       outputs.push({ path, kind: output.kind, type: output.type });
@@ -43,5 +47,6 @@ export async function buildWebBundle(
   return {
     result: { success: result.success, logs: result.logs, outputs },
     styles: stylesPlugin.styles,
+    inputPaths: inputs.paths(result),
   };
 }

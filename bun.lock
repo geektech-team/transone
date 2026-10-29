@@ -23,7 +23,7 @@
     },
     "packages/transone": {
       "name": "transone",
-      "version": "0.8.0",
+      "version": "0.9.0",
     },
     "packages/transone-chart": {
       "name": "transone-chart",
@@ -37,7 +37,7 @@
     },
     "packages/transone-cli": {
       "name": "transone-cli",
-      "version": "0.8.0",
+      "version": "0.10.0",
       "bin": {
         "transone": "bin/transone.ts",
       },
