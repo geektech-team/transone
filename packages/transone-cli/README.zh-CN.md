@@ -21,11 +21,30 @@ app-*          原生应用代码生成（app-ios / app-android / app-harmony，
 
 ```bash
 transone build --target web           # 产出 H5 站点
+transone build --target web-mobile    # 选择 @WebMobile() 实现
+transone build --target web-pc        # 选择 @WebPc() 实现
+transone build --target miniprogram-weixin # 选择 @MiniprogramWeixin() 实现
+transone build --target app-ios       # 选择 @AppIos()，生成原生工程
 transone build --target mp-weixin     # 生成微信小程序原生工程
 transone build --target mp-xiaohongshu # 生成小红书小程序原生工程（XHSML / CSS）
 transone dev                          # 开发服务（仅 web）
+transone dev --target web-mobile       # 移动 Web 开发服务
 transone create                       # 脚手架
 ```
+
+框架 `Platform` 枚举与装饰器为端定义的唯一来源。配置可使用 `target: Platform.WebMobile`，
+命令参数优先；旧的 `mp-*`、`app-*` 命令和平台配置键继续兼容。
+`web-mobile`、`web-pc` 默认分别输出到 `dist/build/web-mobile`、`dist/build/web-pc`。
+
+业务组件 `CardComponent extends BaseComponent` 提供共享状态和方法，端类继承它并使用
+`@WebMobile()`、`@WebPc()`、`@MiniprogramWeixin()`、`@AppIos()` 等装饰器。
+页面只引用 CardComponent。精确端优先，再回退同族通用实现 `@Web()` / `@Miniprogram()` / `@App()`，最后回退可实例化基类；
+冲突和已使用的抽象基类缺少实现时明确报错。通用小程序和 App 层不是独立构建目标，仍需指定微信、iOS 等具体端。
+默认扫描 src 的 TS/TSX，`components.include` / `exclude` 可调整源码范围。
+
+`transone create` 生成共享 Card、三类通用实现和六个具体端实现、配置及脚本，保留任一模板文件已存在即拒绝覆盖的保护。
+需要框架 0.5.0 与 CLI 0.8.0。完整枚举、继承、显式引用和原生静态子集见
+[业务组件与端实现](../../docs/platform-components.md)。
 
 Web 的 `dev`、`build` 会将可安全静态确定的组件 `initStyles()` 样式与文档样式输出为静态 CSS，通过 `<link rel="stylesheet">` 加载。组件提取支持字面量、不可变模块常量、hover、media 与 rpx 换算；依赖 props/state、后续修改 StyleManager 或含不支持语句的方法继续在运行时处理。无法安全确定选择器或跨模块继承关系时，当前 bundle 的组件样式保留在运行时。带标识的文档 `<style>` 和含相对资源 URL 的样式保留内联，以维持原有行为。组件应使用专属选择器：提取的规则在挂载前就已生效，并按稳定的源文件顺序排列。
 

@@ -1,5 +1,12 @@
 import type * as tsTypes from 'typescript';
 import { foldExpression, FoldedValue, isThisExpression } from './fold';
+import {
+  moduleConstants,
+  ownedMethods,
+  ownedMethod,
+  parentSource,
+} from './inheritance';
+import { MethodModuleLinker } from './inline';
 import { mpError } from './errors';
 import { ClassSource, CompileContext, FunctionEntry, UnitKind } from './types';
 
@@ -27,6 +34,7 @@ const COMPONENT_LIFECYCLE: Record<string, string> = {
 export interface CompiledMethods {
   methods: FunctionEntry[];
   lifecycle: FunctionEntry[];
+  inlineModules?: string[];
 }
 
 /**
@@ -44,17 +52,27 @@ export function compileMethods(
   kind: UnitKind,
   customEvents: Set<string>
 ): CompiledMethods {
-  const { ts } = context;
-  const methods = new Map<string, tsTypes.MethodDeclaration>();
-  for (const member of classSource.declaration.members) {
-    if (
-      ts.isMethodDeclaration(member) &&
-      ts.isIdentifier(member.name) &&
-      !isStatic(ts, member)
-    ) {
-      methods.set(member.name.text, member);
-    }
-  }
+  const methods = new Map(
+    ownedMethods(context, classSource).map((item) => [
+      item.declaration.name.getText(item.owner.source),
+      item,
+    ])
+  );
+  const linker = context.index ? new MethodModuleLinker(context) : undefined;
+  const parentAliases = new Map<string, string>();
+  const resolveSuper = (owner: ClassSource, name: string): string => {
+    const parent = parentSource(context, owner);
+    const owned = parent && ownedMethod(context, parent, name);
+    if (!owned)
+      throw mpError(owner.filePath, `不支持 super.${name}(): 未找到父业务方法`);
+    const identity = `${owned.owner.filePath}:${owned.declaration.pos}`;
+    const existing = parentAliases.get(identity);
+    if (existing) return existing;
+    const alias = `__mp_super_${parentAliases.size}_${name}`;
+    parentAliases.set(identity, alias);
+    methods.set(alias, owned);
+    return alias;
+  };
 
   const lifecycleMap = kind === 'page' ? PAGE_LIFECYCLE : COMPONENT_LIFECYCLE;
   const seed = new Set(usedNames);
@@ -81,8 +99,8 @@ export function compileMethods(
       continue;
     }
     visited.add(name);
-    const declaration = methods.get(name);
-    if (!declaration) {
+    const owned = methods.get(name);
+    if (!owned) {
       throw mpError(classSource.filePath, `未找到事件处理方法 "${name}"`);
     }
 
@@ -98,11 +116,13 @@ export function compileMethods(
 
     const fn = compileMethod(
       context,
-      classSource,
-      declaration,
+      owned.owner,
+      owned.declaration,
       kind,
       customEvents,
-      queue
+      queue,
+      resolveSuper,
+      linker
     );
     if (lifecycleKey) {
       lifecycleEntries.push({ key, fn });
@@ -111,7 +131,11 @@ export function compileMethods(
     }
   }
 
-  return { methods: entries, lifecycle: lifecycleEntries };
+  return {
+    methods: entries,
+    lifecycle: lifecycleEntries,
+    inlineModules: linker?.modules(),
+  };
 }
 
 function compileMethod(
@@ -120,7 +144,9 @@ function compileMethod(
   declaration: tsTypes.MethodDeclaration,
   kind: UnitKind,
   customEvents: Set<string>,
-  referencedMethods: string[]
+  referencedMethods: string[],
+  resolveSuper: (owner: ClassSource, name: string) => string,
+  linker?: MethodModuleLinker
 ): string {
   const { ts } = context;
   if (!declaration.body) {
@@ -167,10 +193,13 @@ function compileMethod(
         consts,
         locals,
         referencedMethods,
+        resolveSuper,
       }) as tsTypes.FunctionExpression;
   };
   const result = ts.transform(functionExpression, [transformerFactory]);
-  const transformed = result.transformed[0] as tsTypes.FunctionExpression;
+  const transformed = linker
+    ? linker.rewrite(result.transformed[0], classSource.source)
+    : result.transformed[0];
   result.dispose();
 
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
@@ -183,7 +212,10 @@ function compileMethod(
   // 方法体源码里残留的 TS 类型注解 / as 断言必须经 transpileModule 移除，
   // 否则生成的小程序 JS 无法被解析。
   const transpiled = ts.transpileModule(printed, {
-    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None },
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.None,
+    },
     reportDiagnostics: false,
   });
   return transpiled.outputText.trim();
@@ -196,6 +228,7 @@ interface VisitState {
   consts: Map<string, tsTypes.Expression>;
   locals: Set<string>;
   referencedMethods: string[];
+  resolveSuper: (owner: ClassSource, name: string) => string;
 }
 
 function visit(
@@ -217,6 +250,30 @@ function visit(
   if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
     state.locals.add(node.name.text);
   }
+
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.expression.kind === ts.SyntaxKind.SuperKeyword
+  ) {
+    const alias = state.resolveSuper(classSource, node.expression.name.text);
+    state.referencedMethods.push(alias);
+    const call = ts.factory.createCallExpression(
+      ts.factory.createPropertyAccessExpression(ts.factory.createThis(), alias),
+      undefined,
+      node.arguments
+    );
+    return ts.visitEachChild(
+      call,
+      (child) => visit(context, classSource, child, state),
+      state.transformContext
+    );
+  }
+  if (node.kind === ts.SyntaxKind.SuperKeyword)
+    throw mpError(
+      classSource.filePath,
+      '不支持的 super 表达式：仅支持父业务方法调用'
+    );
 
   // 赋值：this.state.path = expr / += ... -> this.setData({ path: ... })
   if (
@@ -328,22 +385,51 @@ function visit(
     }
   }
 
+  if (
+    ts.isShorthandPropertyAssignment(node) &&
+    !state.locals.has(node.name.text) &&
+    state.consts.has(node.name.text)
+  ) {
+    const value = foldExpression(
+      ts,
+      state.consts.get(node.name.text)!,
+      state.consts
+    );
+    if (
+      value !== undefined &&
+      !(context.index && value !== null && typeof value === 'object')
+    )
+      return ts.factory.createPropertyAssignment(
+        node.name.text,
+        valueToNode(ts, value)
+      );
+  }
+
   // 方法体中的模块常量折叠为字面量
   if (
     ts.isIdentifier(node) &&
+    isValueReference(ts, node) &&
     !state.locals.has(node.text) &&
     state.consts.has(node.text)
   ) {
     const initializer = state.consts.get(node.text)!;
-    if (ts.isCallExpression(initializer) && ts.isIdentifier(initializer.expression)) {
+    if (
+      ts.isCallExpression(initializer) &&
+      ts.isIdentifier(initializer.expression)
+    ) {
       const factoryName = initializer.expression.text;
-      const isRequestFactory = classSource.source.statements.some((statement) =>
-        ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
-        && statement.moduleSpecifier.text === 'transone/request'
-        && statement.importClause?.namedBindings
-        && ts.isNamedImports(statement.importClause.namedBindings)
-        && statement.importClause.namedBindings.elements.some((item) =>
-          item.name.text === factoryName && (item.propertyName?.text ?? item.name.text) === 'createRequest')
+      const isRequestFactory = classSource.source.statements.some(
+        (statement) =>
+          ts.isImportDeclaration(statement) &&
+          ts.isStringLiteral(statement.moduleSpecifier) &&
+          statement.moduleSpecifier.text === 'transone/request' &&
+          statement.importClause?.namedBindings &&
+          ts.isNamedImports(statement.importClause.namedBindings) &&
+          statement.importClause.namedBindings.elements.some(
+            (item) =>
+              item.name.text === factoryName &&
+              (item.propertyName?.text ?? item.name.text) === 'createRequest'
+          )
       );
       if (isRequestFactory) return node;
     }
@@ -353,11 +439,16 @@ function visit(
       state.consts
     );
     if (folded === undefined) {
+      if (context.index) return node;
       throw mpError(
         classSource.filePath,
         `方法中引用了无法静态求值的模块常量 "${node.text}"`
       );
     }
+    // A const binding can still hold a mutable object initialized by its module.
+    // Keep its identity in indexed builds so helper initialization remains visible.
+    if (context.index && folded !== null && typeof folded === 'object')
+      return node;
     return valueToNode(ts, folded);
   }
 
@@ -366,6 +457,26 @@ function visit(
     (child) => visit(context, classSource, child, state),
     state.transformContext
   );
+}
+
+function isValueReference(
+  ts: typeof tsTypes,
+  node: tsTypes.Identifier
+): boolean {
+  const parent = node.parent;
+  if (!parent) return true;
+  if (
+    (ts.isPropertyAccessExpression(parent) ||
+      ts.isPropertyAssignment(parent) ||
+      ts.isVariableDeclaration(parent) ||
+      ts.isParameter(parent) ||
+      ts.isMethodDeclaration(parent) ||
+      ts.isFunctionDeclaration(parent) ||
+      ts.isBindingElement(parent)) &&
+    parent.name === node
+  )
+    return false;
+  return !ts.isShorthandPropertyAssignment(parent);
 }
 
 const BRIDGE_METHODS = new Set(['emit', 'setState', 'setData', 'triggerEvent']);
@@ -526,15 +637,6 @@ function isThisMemberCall(
   );
 }
 
-function isStatic(
-  ts: typeof tsTypes,
-  declaration: tsTypes.MethodDeclaration
-): boolean {
-  return (declaration.modifiers ?? []).some(
-    (modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword
-  );
-}
-
 function isAsync(
   ts: typeof tsTypes,
   declaration: tsTypes.MethodDeclaration
@@ -579,24 +681,5 @@ function collectModuleConsts(
   context: CompileContext,
   classSource: ClassSource
 ): Map<string, tsTypes.Expression> {
-  const consts = new Map<string, tsTypes.Expression>();
-  for (const statement of classSource.source.statements) {
-    if (!context.ts.isVariableStatement(statement)) {
-      continue;
-    }
-    const isConst =
-      statement.declarationList.flags & context.ts.NodeFlags.Const;
-    if (!isConst) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        context.ts.isIdentifier(declaration.name) &&
-        declaration.initializer
-      ) {
-        consts.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return consts;
+  return moduleConstants(context, classSource);
 }

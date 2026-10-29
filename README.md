@@ -35,6 +35,10 @@
 
 ## Quick start
 
+Platform-specific component subclasses are selected by `Platform` enum values and decorators such as `@WebMobile()` / `@WebPc()`. Pages keep referencing a shared `CardComponent extends BaseComponent`; run `transone dev --target web-mobile` or `transone build --target app-ios` to choose a view. `transone create` includes a runnable example. See the [component implementation guide](docs/platform-components.md) for all targets, inheritance, fallback and native compilation boundaries.
+
+Shared views can use `@Web()`, `@Miniprogram()` or `@App()`. Concrete implementations take priority, followed by the matching family view and then the business base.
+
 > The example below is exactly [playground/counter](./playground/counter); M1 is runnable.
 
 ```typescript

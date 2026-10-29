@@ -75,6 +75,14 @@ transone build --target mp-alipay     # Alipay mini-program project (AXML/ACSS)
 transone build --target mp-bytedance  # ByteDance mini-program project (TTML/TTSS)
 ```
 
+## Platform component implementations
+
+From framework 0.5.0 and CLI 0.8.0, a business component can extend `BaseComponent<Props, State>` and share its state/methods with platform subclasses. Decorate an exported subclass with `@WebMobile()`, `@WebPc()`, `@MiniprogramWeixin()` or `@AppIos()`; the framework's `Platform` enum supplies the matching values such as `web-mobile` and `app-ios`.
+
+Pages keep referencing the business base through `createComponent({ component: CardComponent })`. Run `transone dev --target web-mobile` or `transone build --target app-ios` to select the implementation. Exact matches take priority, followed by the matching family implementation (`@Web()`, `@Miniprogram()` or `@App()`) and then a concrete base; ambiguous implementations and missing implementations for consumed abstract bases fail with diagnostics. Existing `Component` users and legacy target names remain supported. Generic mini-program and App markers select component implementations; builds still require concrete targets.
+
+`transone create` generates a runnable shared Card example. See the [component implementation guide](../../docs/platform-components.md) for all platforms, discovery configuration, inheritance, explicit references and the native compiler's static subset.
+
 ## Reactivity
 
 ```ts
@@ -227,6 +235,7 @@ Errors are normalized to `RequestError` (`code` / `config` / `response` / `cause
 | `transone/request` | `createRequest`, `request`, `Request`, `InterceptorManager`, `RequestError`, `detectPlatform` |
 | `transone/style` | `StyleManager`, style sheets and units |
 | `transone/dom` | DOM abstractions: `createDomWindow`, `installDomGlobals`, `parseHtmlFragment` |
+| `transone/platform` | `Platform`, platform definitions and class decorators |
 
 ## Relationship with TSone
 

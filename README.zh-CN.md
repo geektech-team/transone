@@ -5,6 +5,8 @@
 > 一份 TypeScript 源码，编译期静态转换为 Web 与多端小程序产物，未来扩展到原生 App 的跨端前端框架。
 > 与 TSone 同源的 One 家族成员。
 
+业务组件可通过 `@Web()` / `@Miniprogram()` / `@App()` 提供通用视图；具体端实现优先，再回退到同族通用视图和业务基类。
+
 ## 特性
 
 - 纯 TypeScript 实现，TypeScript 为第一公民，公开 API 提供完整类型定义
@@ -34,6 +36,11 @@
 > M1–M3 已落地：`--target web` 产出 H5 站点、`--target mp-weixin` 产出微信原生工程、`--target mp-alipay` 产出阿里原生工程（AXML/ACSS）、`--target mp-bytedance` 产出字节原生工程（TTML/TTSS）。同一份源码经跨端差异层（MpDialect）静态转换。见 [playground/counter](./playground/counter)。
 
 ## 快速开始
+
+框架统一提供 `Platform` 枚举与 `@WebMobile()`、`@WebPc()` 等装饰器。
+业务组件继承 BaseComponent，共享状态和方法；页面只引用业务基类，
+由 `dev/build --target web-mobile`、`--target app-ios` 等命令选择端实现。
+`transone create` 自带可运行示例，详见[业务组件与端实现](docs/platform-components.md)。
 
 > 以下示例即 [playground/counter](./playground/counter) 的实现，M1 已可运行。
 

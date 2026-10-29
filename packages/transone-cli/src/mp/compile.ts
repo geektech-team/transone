@@ -55,7 +55,9 @@ export function compileUnit(
       usedNames.add(emitter.method);
     }
     const customEvents = new Set<string>();
-    const inlineModules = collectInlineModules(context, classSource);
+    const legacyModules = context.index
+      ? undefined
+      : collectInlineModules(context, classSource);
     const compiledMethods = compileMethods(
       context,
       classSource,
@@ -93,7 +95,7 @@ export function compileUnit(
       lifecycle: compiledMethods.lifecycle,
       customEvents: [...customEvents],
       usingComponents,
-      inlineModules,
+      inlineModules: compiledMethods.inlineModules ?? legacyModules ?? [],
     };
 
     if (kind === 'component') {

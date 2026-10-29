@@ -1,10 +1,13 @@
 import type * as tsTypes from 'typescript';
+import type { ComponentIndex, ClassReference } from '../components/types';
 import type { MpDialect } from './dialect';
 
 export type UnitKind = 'page' | 'component';
 
 /** 一个 Component 子类的定位信息：文件 + 类声明。 */
 export interface ClassSource {
+  reference?: ClassReference;
+  logical?: ClassReference;
   filePath: string;
   source: tsTypes.SourceFile;
   declaration: tsTypes.ClassLikeDeclaration;
@@ -51,6 +54,11 @@ export interface CompiledUnit {
 
 /** 编译过程中的上下文：跨模块共享的文件缓存与产物缓存。 */
 export interface CompileContext {
+  /** Per-build checker/source fallback for installed packages publishing types + source. */
+  sourcePrograms?: Map<string, tsTypes.Program>;
+  packageSources?: Map<string, ClassSource>;
+  packageComponentSources?: Set<tsTypes.SourceFile>;
+  index?: ComponentIndex;
   ts: typeof tsTypes;
   root: string;
   /** 已解析的源文件缓存（绝对路径 -> SourceFile）。 */

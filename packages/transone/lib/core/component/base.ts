@@ -36,6 +36,16 @@ export type ComponentConstructor<
   TState extends ComponentState = ComponentState,
 > = new (props?: TProps) => Component<TProps, TState>;
 
+/** A logical component reference may be abstract and resolved by the application bundle. */
+export type ComponentReference<
+  TProps extends ComponentProps = ComponentProps,
+  TState extends ComponentState = ComponentState,
+> = abstract new (props?: TProps) => Component<TProps, TState>;
+
+export type AnyComponentReference = abstract new (
+  props?: never
+) => Component<ComponentProps, ComponentState>;
+
 export type AnyComponentConstructor = new (
   props?: never
 ) => Component<ComponentProps, ComponentState>;

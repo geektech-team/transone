@@ -1,6 +1,8 @@
 import { Component } from './base';
 import type {
   AnyComponentConstructor,
+  AnyComponentReference,
+  ComponentReference,
   ComponentConstructor,
   ComponentEventListener,
   InjectionKey,
@@ -13,6 +15,8 @@ import type {
 export { Component };
 export type {
   AnyComponentConstructor,
+  AnyComponentReference,
+  ComponentReference,
   ComponentConstructor,
   ComponentEventListener,
   InjectionKey,
@@ -20,3 +24,5 @@ export type {
   ComponentProps,
   ComponentState,
 };
+
+export { BaseComponent } from './base-component';

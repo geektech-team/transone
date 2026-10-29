@@ -10,7 +10,7 @@ export async function buildNativeApp(config: ResolvedConfig, dialect: NativeDial
   if (!config.app) throw new Error('Native app build requires config.app');
   const entries = Object.values(config.app.pages);
   if (entries.length !== 1) throw nativeError(config.entry, '首期原生 App 只支持一个页面');
-  const screen = await analyzeNativeScreen(entries[0]);
+  const screen = await analyzeNativeScreen(entries[0], config);
   const files = dialect.generateProject(screen, config.app);
   if (config.app.host !== undefined) {
     files[`${dialect.resourceDirectory}/transone.config.json`] =

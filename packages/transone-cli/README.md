@@ -20,19 +20,22 @@ Requires Bun >= 1.3.0.
 ```text
 Usage:
   transone create
-  transone dev [--host <host>] [--port <port>] [--base <path>] [--no-watch]
+  transone dev [--target <web|web-mobile|web-pc>] [--host <host>] [--port <port>] [--base <path>] [--no-watch]
   transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]
 
-Targets: web, mp-weixin, mp-alipay, mp-bytedance, mp-xiaohongshu, app-ios, app-android, app-harmony (default: web)
+Targets: web, web-mobile, web-pc, miniprogram-weixin, miniprogram-alipay, miniprogram-bytedance, miniprogram-xiaohongshu, app-ios, app-android, app-harmony
+Legacy mp-* / app-* aliases remain supported (default: web).
 ```
 
 ### `transone create`
 
-Scaffolds a new TransOne project in the current directory (refuses to overwrite existing project files).
+Scaffolds a new TransOne project with a shared Card business component and generic Web, mini-program and App implementations, plus mobile, PC, Weixin, Alipay, iOS and Android implementations. The page references only `CardComponent`; the compiler selects a subclass. The generated scripts cover all ten platforms. Existing template files, including nested component files, are protected from overwriting.
 
 ### `transone dev`
 
 Starts the development server (Web target only) with optional watch mode (`--no-watch` to disable), custom `--host` / `--port`, and a `--base` path.
+
+`--target web-mobile` and `--target web-pc` choose the implementation marked by `@WebMobile()` / `@WebPc()`. Framework `Platform` values and decorators are shared with the CLI. `target` in configuration sets a default; command options take priority. Legacy `mp-*` target names remain aliases for canonical `miniprogram-*` values; `app-*` names are canonical values.
 
 Development bundles are written to `dist/dev/h5/<session>/<generation>`. After a successful rebuild, superseded generations and their resource URLs are removed after a five-second grace period; an in-flight page render delays that period until it finishes. Failed builds discard their temporary output and keep the last successful bundle. Stopping or restarting the server cleans up its own session directory.
 
@@ -55,6 +58,8 @@ transone build --target mp-xiaohongshu # Xiaohongshu mini-program project (XHSML
 Web `dev` and `build` emit fixed component `initStyles()` rules that can be resolved safely and document styles as static CSS files, loaded through `<link rel="stylesheet">`. Component extraction supports literal values and immutable module constants, including hover, media queries and rpx conversion. Methods that depend on props/state, mutate their style manager later, or contain unsupported statements keep runtime styling. When selectors or inheritance cannot be resolved safely, the bundle retains runtime component styling. Identified document `<style>` elements and sheets with relative resource URLs stay inline to preserve their behavior. Use component-specific selectors: extracted rules are available before component mount and follow a stable source-file order.
 
 Web production entry and chunk JavaScript filenames contain a content hash (for example `main-<hash>.js`); HTML references the emitted filenames. Unchanged content keeps its hash. Mini-program and library entry filenames follow their existing platform/package contracts.
+
+Platform selection uses real class identities, follows inheritance and preserves parent-module constants/helpers. Only the selected implementation and shared dependencies enter an application bundle. Exact platform matches win, followed by the matching `@Web()`, `@Miniprogram()` or `@App()` family implementation, then a concrete business base; conflicting implementations or a consumed abstract base without a match fail explicitly. Generic mini-program and App markers are not standalone build targets; specify a concrete platform. `components.include` / `exclude` extend source discovery. See the [component implementation guide](../../docs/platform-components.md) for enum/decorator mappings, native static composition limits and explicit implementation references.
 
 The iOS, Android, and Harmony native app targets are implemented. A generated project should still be opened in its platform IDE for runtime/device validation.
 

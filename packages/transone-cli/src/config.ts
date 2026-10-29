@@ -1,11 +1,16 @@
 import type { TargetType } from './target/types';
+import {
+  getPlatformDefinition,
+  normalizePlatform,
+  Platform,
+  PLATFORM_DEFINITIONS,
+} from 'transone/platform';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   APP_TARGET_TYPES,
   isAppTargetType,
   isMpTargetType,
-  isTargetType,
   MP_TARGET_TYPES,
 } from './target/types';
 import type {
@@ -24,9 +29,13 @@ import type {
   UserConfig,
   UserAppConfig,
   UserMiniProgramConfig,
+  TargetInput,
+  ComponentScanConfig,
 } from './types';
 
 interface MergedConfig {
+  target?: TargetInput;
+  components?: ComponentScanConfig;
   entry: string;
   pages?: Record<string, string>;
   server: {
@@ -92,7 +101,15 @@ export async function resolveConfig(
     throw new Error(`Entry file does not exist: ${entry}`);
   }
   const pages = await resolvePages(root, entry, config.pages);
-  const target = resolveTarget(options.target);
+  const platform = resolvePlatform(options.target ?? config.target);
+  const target = getPlatformDefinition(platform).target;
+  const explicitOutDir =
+    options.outDir ?? options.config?.build?.outDir ?? fileConfig.build?.outDir;
+  const webOutDir =
+    explicitOutDir ??
+    (platform === Platform.WebMobile || platform === Platform.WebPc
+      ? `dist/build/${platform}`
+      : config.build.outDir);
   // 公共小程序配置与当前平台配置合并，平台字段优先。
   const mpConfig = pickMpConfig(config.mp, target);
   const mpPages = mpConfig?.pages
@@ -111,13 +128,15 @@ export async function resolveConfig(
     entry,
     pages,
     target,
+    platform,
+    ...(config.components ? { components: config.components } : {}),
     server: {
       host: config.server.host,
       port: config.server.port,
       proxy: config.server.proxy,
     },
     build: {
-      outDir: resolve(root, config.build.outDir),
+      outDir: resolve(root, webOutDir),
       basePath: normalizeBasePath(config.build.basePath),
       directoryPages: config.build.directoryPages,
     },
@@ -128,7 +147,7 @@ export async function resolveConfig(
       ? {
           mp: resolveMiniProgram(
             root,
-            options.mpOutDir,
+            options.mpOutDir ?? options.outDir,
             mpConfig ?? {},
             mpPages,
             target
@@ -136,15 +155,22 @@ export async function resolveConfig(
         }
       : {}),
     ...(isAppTargetType(target)
-      ? { app: await resolveApp(root, options.outDir, appConfig ?? {}, target, pages) }
+      ? {
+          app: await resolveApp(
+            root,
+            options.outDir,
+            appConfig ?? {},
+            target,
+            pages
+          ),
+        }
       : {}),
   };
 }
 
 function isAppConfigMap(value: unknown): value is AppConfigMap {
   return (
-    isRecord(value) &&
-    APP_TARGET_TYPES.some((platform) => platform in value)
+    isRecord(value) && APP_TARGET_TYPES.some((platform) => platform in value)
   );
 }
 
@@ -156,8 +182,10 @@ function pickAppConfig(
     return undefined;
   }
   if (isAppConfigMap(app)) {
-    return { ...(app.host !== undefined ? { host: app.host } : {}),
-      ...(isAppTargetType(target) ? app[target] : {}) };
+    return {
+      ...(app.host !== undefined ? { host: app.host } : {}),
+      ...(isAppTargetType(target) ? app[target] : {}),
+    };
   }
   return app;
 }
@@ -173,14 +201,22 @@ async function resolveApp(
     ...(app.host !== undefined ? { host: app.host } : {}),
     appName: app.appName ?? 'TransOne',
     bundleId: app.bundleId ?? 'com.transone.app',
-    outDir: resolve(root, outDirOverride ?? app.outDir ?? `dist/build/${target}`),
+    outDir: resolve(
+      root,
+      outDirOverride ?? app.outDir ?? `dist/build/${target}`
+    ),
     minPlatformVersion: app.minPlatformVersion ?? '16.0',
     publicDir: resolve(root, app.publicDir ?? 'public'),
     pages: app.pages
-      ? await resolvePages(root, resolve(root, app.pages['/'] ?? 'src/main.ts'), app.pages, {
-          includeEntry: false,
-          allowRoot: true,
-        })
+      ? await resolvePages(
+          root,
+          resolve(root, app.pages['/'] ?? 'src/main.ts'),
+          app.pages,
+          {
+            includeEntry: false,
+            allowRoot: true,
+          }
+        )
       : fallbackPages,
   };
 }
@@ -202,7 +238,8 @@ function pickMpConfig(
   }
   const common = Object.fromEntries(
     Object.entries(mp).filter(
-      ([key]) => !MP_TARGET_TYPES.includes(key as typeof MP_TARGET_TYPES[number])
+      ([key]) =>
+        !MP_TARGET_TYPES.includes(key as (typeof MP_TARGET_TYPES)[number])
     )
   );
   const platform = isMpTargetType(target) ? mp[target] : undefined;
@@ -219,9 +256,10 @@ function mergeMpRecords(
     const previous = Object.prototype.hasOwnProperty.call(common, key)
       ? common[key]
       : undefined;
-    const next = isRecord(previous) && isRecord(value)
-      ? mergeMpRecords(previous, value)
-      : value;
+    const next =
+      isRecord(previous) && isRecord(value)
+        ? mergeMpRecords(previous, value)
+        : value;
     Object.defineProperty(merged, key, {
       value: next,
       enumerable: true,
@@ -244,7 +282,10 @@ function resolveMiniProgram(
     appId: mp.appId ?? 'touristappid',
     outDir: resolve(
       root,
-      outDirOverride ?? mp.outDir ?? (MP_DEFAULT_OUT_DIRS[target] ?? 'dist/build/mp-weixin')
+      outDirOverride ??
+        mp.outDir ??
+        MP_DEFAULT_OUT_DIRS[target] ??
+        'dist/build/mp-weixin'
     ),
     navigationBarTitleText: mp.navigationBarTitleText ?? 'TransOne',
     pages,
@@ -286,17 +327,12 @@ function normalizeBasePath(base: string | undefined): string {
   return withLeading.endsWith('/') ? withLeading.slice(0, -1) : withLeading;
 }
 
-function resolveTarget(target: unknown): ResolvedConfig['target'] {
-  if (target === undefined) {
-    return 'web';
-  }
-  if (isTargetType(target)) {
-    return target;
-  }
+function resolvePlatform(target: unknown): Platform {
+  const platform = normalizePlatform(target ?? Platform.Web);
+  if (platform !== undefined) return platform;
   throw new Error(
     `Unknown build target "${String(target)}". ` +
-      'Available targets: web, mp-weixin, mp-alipay, mp-bytedance, mp-xiaohongshu, ' +
-      'app-ios, app-android, app-harmony.'
+      `Available targets: ${PLATFORM_DEFINITIONS.map((definition) => definition.platform).join(', ')}.`
   );
 }
 
@@ -321,10 +357,7 @@ async function resolvePages(
   return resolved;
 }
 
-function normalizePageRoute(
-  route: string,
-  allowRoot = false
-): string {
+function normalizePageRoute(route: string, allowRoot = false): string {
   if (route === '/') {
     if (allowRoot) {
       return '/';
@@ -385,6 +418,10 @@ function mergeConfig(...configs: UserConfig[]): MergedConfig {
     const build = config.build;
 
     return {
+      target: config.target ?? merged.target,
+      components: config.components
+        ? { ...merged.components, ...config.components }
+        : merged.components,
       entry: config.entry ?? merged.entry,
       pages: config.pages ?? merged.pages,
       server: {
@@ -409,6 +446,20 @@ function mergeConfig(...configs: UserConfig[]): MergedConfig {
 
 function validateUserConfig(config: unknown): asserts config is UserConfig {
   assertRecord(config, 'Config');
+
+  if (
+    config.target !== undefined &&
+    normalizePlatform(config.target) === undefined
+  ) {
+    throw new Error(`Config target is invalid: ${String(config.target)}`);
+  }
+  if (config.components !== undefined) {
+    assertRecord(config.components, 'Config components');
+    for (const key of ['include', 'exclude'] as const) {
+      if (config.components[key] !== undefined)
+        assertStringArray(config.components[key], `Config components.${key}`);
+    }
+  }
 
   if (config.entry !== undefined && typeof config.entry !== 'string') {
     throw new Error('Config entry must be a string');
@@ -437,7 +488,14 @@ function validateAppConfig(app: unknown): asserts app is UserAppConfig {
   assertRecord(app, 'Config app');
   validateApiHost(app.host, 'Config app.host');
   if (isAppConfigMap(app)) {
-    const flatKeys = ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir', 'pages'];
+    const flatKeys = [
+      'appName',
+      'bundleId',
+      'outDir',
+      'minPlatformVersion',
+      'publicDir',
+      'pages',
+    ];
     if (flatKeys.some((key) => key in app)) {
       throw new Error('Config app cannot mix flat fields with platform keys');
     }
@@ -457,7 +515,13 @@ function validateSingleAppConfig(
 ): asserts app is AppConfig {
   assertRecord(app, label);
   validateApiHost(app.host, `${label}.host`);
-  for (const key of ['appName', 'bundleId', 'outDir', 'minPlatformVersion', 'publicDir'] as const) {
+  for (const key of [
+    'appName',
+    'bundleId',
+    'outDir',
+    'minPlatformVersion',
+    'publicDir',
+  ] as const) {
     if (app[key] !== undefined && typeof app[key] !== 'string') {
       throw new Error(`${label}.${key} must be a string`);
     }
@@ -468,9 +532,7 @@ function validateSingleAppConfig(
 }
 
 /** 公共字段和各平台字段分别校验，避免平台键使公共字段绕过校验。 */
-function validateMpConfig(
-  mp: unknown
-): asserts mp is UserMiniProgramConfig {
+function validateMpConfig(mp: unknown): asserts mp is UserMiniProgramConfig {
   assertRecord(mp, 'Config mp');
   validateMiniProgramConfig(mp, 'Config mp');
   for (const platform of MP_TARGET_TYPES) {
@@ -487,7 +549,12 @@ function validateMiniProgramConfig(
   assertRecord(mp, label);
   validateApiHost(mp.host, `${label}.host`);
 
-  for (const key of ['appId', 'outDir', 'navigationBarTitleText', 'publicDir'] as const) {
+  for (const key of [
+    'appId',
+    'outDir',
+    'navigationBarTitleText',
+    'publicDir',
+  ] as const) {
     if (mp[key] !== undefined && typeof mp[key] !== 'string') {
       throw new Error(`${label}.${key} must be a string`);
     }

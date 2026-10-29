@@ -6,6 +6,7 @@ import type { ResolvedConfig, BuildResult } from '../types';
 import type { MpDialect } from './dialect';
 import { loadTypescript } from './ts-loader';
 import { CompileContext, CompiledUnit } from './types';
+import { createComponentIndex } from '../components';
 import { findRootClass } from './analyze';
 import { compileUnit, finalizeComponentProperties } from './compile';
 import { generatePageJs, generateComponentJs } from './jsgen';
@@ -29,6 +30,12 @@ export async function buildMiniProgram(
   const ts = await loadTypescript();
   const context: CompileContext = {
     ts,
+    index: createComponentIndex({
+      root: config.root,
+      entrypoints: Object.values(mp.pages),
+      platform: config.platform,
+      ...config.components,
+    }),
     root: config.root,
     files: new Map(),
     components: new Map(),
@@ -96,16 +103,25 @@ export async function buildMiniProgram(
 
   const requestBundle = await Bun.build({
     entrypoints: [fileURLToPath(import.meta.resolve('transone/request'))],
-    target: 'browser', format: 'cjs', minify: false,
+    target: 'browser',
+    format: 'cjs',
+    minify: false,
   });
-  if (!requestBundle.success) throw new Error(`Mini program request runtime build failed: ${requestBundle.logs.join('\n')}`);
+  if (!requestBundle.success)
+    throw new Error(
+      `Mini program request runtime build failed: ${requestBundle.logs.join('\n')}`
+    );
   await write('transone-request.js', await requestBundle.outputs[0].text());
   await write(
     'app.js',
-    `App({__transoneRequest: require('./transone-request.js'), ...${JSON.stringify({
-      ...(mp.host !== undefined ? { __transoneConfig: { host: mp.host } } : {}),
-      ...(mp.globalData !== undefined ? { globalData: mp.globalData } : {}),
-    })}});\n`
+    `App({__transoneRequest: require('./transone-request.js'), ...${JSON.stringify(
+      {
+        ...(mp.host !== undefined
+          ? { __transoneConfig: { host: mp.host } }
+          : {}),
+        ...(mp.globalData !== undefined ? { globalData: mp.globalData } : {}),
+      }
+    )}});\n`
   );
   if (dialect.sitemap) {
     await write(
@@ -150,9 +166,18 @@ export async function buildMiniProgram(
 
   // —— 自定义组件 ——
   for (const [tag, unit] of context.components) {
-    await write(`components/${tag}/${tag}.${dialect.templateExt}`, unit.template);
-    await write(`components/${tag}/${tag}.${dialect.styleExt}`, `${unit.style}\n`);
-    await write(`components/${tag}/${tag}.js`, generateComponentJs(unit, dialect));
+    await write(
+      `components/${tag}/${tag}.${dialect.templateExt}`,
+      unit.template
+    );
+    await write(
+      `components/${tag}/${tag}.${dialect.styleExt}`,
+      `${unit.style}\n`
+    );
+    await write(
+      `components/${tag}/${tag}.js`,
+      generateComponentJs(unit, dialect)
+    );
     await write(
       `components/${tag}/${tag}.json`,
       `${JSON.stringify(

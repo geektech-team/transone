@@ -1,4 +1,4 @@
-import { AnyComponentConstructor, Component } from '../core/component';
+import { AnyComponentReference, Component } from '../core/component';
 import { OneApp } from '../core/app';
 import type { VNode } from '../core/vnode';
 import { setRouter } from './instance';
@@ -15,7 +15,7 @@ export type RouteMeta = Record<string, unknown>;
 
 export interface RouteRecord {
   path: string;
-  component?: AnyComponentConstructor;
+  component?: AnyComponentReference;
   redirect?: string;
   name?: string;
   meta?: RouteMeta;

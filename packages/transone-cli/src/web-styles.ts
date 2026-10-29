@@ -17,7 +17,13 @@ export interface WebStylesPlugin extends BunPlugin {
 
 /** Extract complete, pure initStyles methods. Runtime StyleManager stays intact. */
 export function createWebStylesPlugin(
-  disabledFiles: ReadonlySet<string> = new Set()
+  disabledFiles: ReadonlySet<string> = new Set(),
+  transformSource?: (
+    path: string,
+    contents: string,
+    definitions?: boolean
+  ) => string,
+  extract = true
 ): WebStylesPlugin {
   const styles = new Map<string, string>();
   const runtimeFiles = new Set<string>();
@@ -36,17 +42,33 @@ export function createWebStylesPlugin(
       owners.clear();
       unknownSelector = false;
       unknownInheritance = false;
-      build.onLoad({ filter: SOURCE_FILTER }, async ({ path }) => {
+      const load = async (path: string, definitions = false) => {
         styles.delete(path);
-        const contents = await Bun.file(path).text();
-        if (!contents.includes('styleManager') && !contents.includes('extends'))
-          return;
+        const filePath = definitions
+          ? path.replace(/\?transone-definitions$/, '')
+          : path;
+        const original = await Bun.file(filePath).text();
+        const contents =
+          transformSource?.(filePath, original, definitions) ?? original;
+        const transformedResult = () =>
+          contents !== original || definitions
+            ? {
+                contents,
+                loader: sourceLoader(filePath),
+                resolveDir: dirname(filePath),
+              }
+            : undefined;
+        if (
+          !extract ||
+          (!contents.includes('styleManager') && !contents.includes('extends'))
+        )
+          return transformedResult();
         const source = ts.createSourceFile(
-          path,
+          filePath,
           contents,
           ts.ScriptTarget.Latest,
           true,
-          scriptKind(path)
+          scriptKind(filePath)
         );
         const extracted = extractStyles(source);
         if (extracted.bodies.length) candidates.add(path);
@@ -62,7 +84,8 @@ export function createWebStylesPlugin(
         unknownInheritance ||= extracted.unknownInheritance;
         if (unknownSelector || unknownInheritance)
           for (const file of candidates) runtimeFiles.add(file);
-        if (!extracted.bodies.length || disabledFiles.has(path)) return;
+        if (!extracted.bodies.length || disabledFiles.has(path))
+          return transformedResult();
         styles.set(path, extracted.css);
         let transformed = contents;
         for (const body of extracted.bodies.sort(
@@ -75,10 +98,18 @@ export function createWebStylesPlugin(
         }
         return {
           contents: transformed,
-          loader: sourceLoader(path),
-          resolveDir: dirname(path),
+          loader: sourceLoader(filePath),
+          resolveDir: dirname(filePath),
         };
-      });
+      };
+      if (transformSource)
+        build.onLoad(
+          { filter: /.*/, namespace: 'transone-definitions' },
+          ({ path }) => load(path, true)
+        );
+      build.onLoad({ filter: SOURCE_FILTER, namespace: 'file' }, ({ path }) =>
+        load(path)
+      );
     },
   };
 }
@@ -489,14 +520,16 @@ function componentBindings(
           if (
             ts.isIdentifier(declaration.name) &&
             !unsafe.has(declaration.name.text)
-          )
+          ) {
             names.add(`${declaration.name.text}.Component`);
+            names.add(`${declaration.name.text}.BaseComponent`);
+          }
           if (ts.isObjectBindingPattern(declaration.name)) {
             for (const binding of declaration.name.elements) {
               const imported = binding.propertyName ?? binding.name;
               if (
                 ts.isIdentifier(imported) &&
-                imported.text === 'Component' &&
+                ['Component', 'BaseComponent'].includes(imported.text) &&
                 ts.isIdentifier(binding.name) &&
                 !binding.initializer &&
                 !binding.dotDotDotToken &&
@@ -507,7 +540,7 @@ function componentBindings(
           }
         } else if (
           ts.isPropertyAccessExpression(initializer) &&
-          initializer.name.text === 'Component' &&
+          ['Component', 'BaseComponent'].includes(initializer.name.text) &&
           isTransoneRequire(initializer.expression) &&
           ts.isIdentifier(declaration.name) &&
           !unsafe.has(declaration.name.text)
@@ -527,12 +560,16 @@ function componentBindings(
       for (const binding of named.elements) {
         if (
           !binding.isTypeOnly &&
-          (binding.propertyName?.text ?? binding.name.text) === 'Component'
+          ['Component', 'BaseComponent'].includes(
+            binding.propertyName?.text ?? binding.name.text
+          )
         )
           names.add(binding.name.text);
       }
-    } else if (named && ts.isNamespaceImport(named))
+    } else if (named && ts.isNamespaceImport(named)) {
       names.add(`${named.name.text}.Component`);
+      names.add(`${named.name.text}.BaseComponent`);
+    }
   }
   // Published UI bundles rename the Component base. Recognize its constructor
   // lifecycle and actual bundled StyleManager, rather than class names alone.
@@ -593,6 +630,32 @@ function componentBindings(
   let changed = true;
   while (changed) {
     changed = false;
+    for (const statement of source.statements)
+      if (
+        ts.isVariableStatement(statement) &&
+        statement.declarationList.flags & ts.NodeFlags.Const
+      )
+        for (const declaration of statement.declarationList.declarations) {
+          if (
+            !ts.isIdentifier(declaration.name) ||
+            !declaration.initializer ||
+            unsafe.has(declaration.name.text) ||
+            names.has(declaration.name.text)
+          )
+            continue;
+          const initializer = unwrap(declaration.initializer);
+          const target = ts.isIdentifier(initializer)
+            ? initializer.text
+            : ts.isPropertyAccessExpression(initializer) &&
+                ts.isIdentifier(initializer.expression)
+              ? `${initializer.expression.text}.${initializer.name.text}`
+              : undefined;
+          if (target && names.has(target)) {
+            names.add(declaration.name.text);
+            if (roots.has(target)) roots.add(declaration.name.text);
+            changed = true;
+          }
+        }
     for (const declaration of classes) {
       const name = classBinding(declaration);
       if (name && !names.has(name) && extendsComponent(declaration, names)) {

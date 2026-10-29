@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type * as tsTypes from 'typescript';
+import { reference, selected } from './inheritance';
+import { loadSourceExport } from './source';
 import { mpError } from './errors';
 import { ClassSource, CompileContext } from './types';
 import { unwrapParentheses } from './fold';
@@ -83,12 +85,10 @@ export function findRootClass(
         className: name,
       })
     ) {
-      return {
-        filePath,
-        source,
-        declaration: statement,
-        className: name,
-      };
+      const ref = context.index?.findClass(filePath, name);
+      return ref
+        ? selected(context, ref)
+        : { filePath, source, declaration: statement, className: name };
     }
   }
 
@@ -102,7 +102,10 @@ export function findRootClass(
         className: name,
       })
     ) {
-      return { filePath, source, declaration, className: name };
+      const ref = context.index?.findClass(filePath, name);
+      return ref
+        ? selected(context, ref)
+        : { filePath, source, declaration, className: name };
     }
   }
 
@@ -125,6 +128,8 @@ export function resolveClassReference(
   expr: tsTypes.Expression
 ): ClassSource {
   const { ts } = context;
+  const indexed = context.index?.resolve(expr, from.source);
+  if (indexed) return selected(context, indexed);
   expr = unwrapParentheses(ts, expr);
 
   if (ts.isClassExpression(expr) || ts.isClassDeclaration(expr)) {
@@ -175,6 +180,8 @@ export function isComponentSubclass(
   classSource: ClassSource
 ): boolean {
   const { ts } = context;
+  const indexed = reference(context, classSource);
+  if (indexed && context.index!.isComponent(indexed)) return true;
   const heritage = classSource.declaration.heritageClauses ?? [];
   const imports = collectImports(ts, classSource.source);
   for (const clause of heritage) {
@@ -266,6 +273,8 @@ function resolvePackageClass(
       `包 "${binding.specifier}" 的 "source" 指向的文件不存在: ${sourceField}`
     );
   }
+  if (context.index)
+    return loadSourceExport(context, targetPath, [binding.importedName]);
   const source = readSource(context, targetPath);
   const importedName = binding.importedName;
   const found = findExportedClass(context, source, importedName, new Set());
@@ -289,7 +298,10 @@ interface PackageInfo {
 }
 
 /** 沿 fromFile 目录向上查找 node_modules/<specifier>/package.json。 */
-function findPackageInfo(fromFile: string, specifier: string): PackageInfo | undefined {
+function findPackageInfo(
+  fromFile: string,
+  specifier: string
+): PackageInfo | undefined {
   const segments = specifier.split('/');
   const packageJsonRelative = join('node_modules', ...segments, 'package.json');
   let current = dirname(fromFile);
@@ -297,8 +309,14 @@ function findPackageInfo(fromFile: string, specifier: string): PackageInfo | und
     const candidate = join(current, packageJsonRelative);
     if (existsSync(candidate)) {
       try {
-        const json = JSON.parse(readFileSync(candidate, 'utf8')) as Record<string, unknown>;
-        return { dir: join(current, 'node_modules', ...segments), source: json.source };
+        const json = JSON.parse(readFileSync(candidate, 'utf8')) as Record<
+          string,
+          unknown
+        >;
+        return {
+          dir: join(current, 'node_modules', ...segments),
+          source: json.source,
+        };
       } catch {
         return undefined;
       }
@@ -311,7 +329,10 @@ function findPackageInfo(fromFile: string, specifier: string): PackageInfo | und
   }
 }
 
-function resolvePackageSource(packageDir: string, sourceField: string): string | undefined {
+function resolvePackageSource(
+  packageDir: string,
+  sourceField: string
+): string | undefined {
   const base = resolve(packageDir, sourceField);
   const candidates = [base, `${base}.ts`, `${base}.tsx`];
   return candidates.find((candidate) => existsSync(candidate));
@@ -359,7 +380,9 @@ function findExportedClass(
         if (!statement.moduleSpecifier) {
           continue;
         }
-        const specifier = statement.moduleSpecifier.getText().replace(/['"]/g, '');
+        const specifier = statement.moduleSpecifier
+          .getText()
+          .replace(/['"]/g, '');
         if (!specifier.startsWith('.')) {
           continue;
         }

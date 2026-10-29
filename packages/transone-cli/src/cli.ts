@@ -1,16 +1,22 @@
 import { build } from './build';
 import { createProject } from './create';
 import { startDevServer } from './server';
-import { isTargetType, TARGET_TYPES } from './target/types';
-import type { TargetType } from './target/types';
+import {
+  getPlatformDefinition,
+  normalizePlatform,
+  PLATFORM_DEFINITIONS,
+} from 'transone/platform';
+import { TARGET_TYPES } from './target/types';
+import type { TargetInput } from './types';
 
 const USAGE = [
   'Usage:',
   '  transone create',
-  '  transone dev [--host <host>] [--port <port>] [--base <path>] [--no-watch]',
+  '  transone dev [--target <web|web-mobile|web-pc>] [--host <host>] [--port <port>] [--base <path>] [--no-watch]',
   '  transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]',
   '',
-  `Targets: ${TARGET_TYPES.join(', ')} (default: web)`,
+  `Targets: ${PLATFORM_DEFINITIONS.map((definition) => definition.platform).join(', ')} (default: web)`,
+  `Compatible backend aliases: ${TARGET_TYPES.filter((target) => target !== 'web').join(', ')}`,
 ].join('\n');
 
 const FLAG_OPTIONS = new Set(['--no-watch', '--library']);
@@ -21,6 +27,7 @@ export interface CreateCliArgs {
 
 export interface DevCliArgs {
   command: 'dev';
+  target?: TargetInput;
   host?: string;
   port?: number;
   base?: string;
@@ -29,7 +36,7 @@ export interface DevCliArgs {
 
 export interface BuildCliArgs {
   command: 'build';
-  target?: TargetType;
+  target?: TargetInput;
   outDir?: string;
   base?: string;
   library?: boolean;
@@ -79,8 +86,20 @@ export function parseCliArgs(argv: string[]): CliArgs {
 
   if (command === 'dev') {
     const port = options.get('--port');
+    const target = options.has('--target')
+      ? parseTarget(options.get('--target'))
+      : undefined;
+    if (
+      target !== undefined &&
+      getPlatformDefinition(normalizePlatform(target)!).family !== 'web'
+    ) {
+      throw parseError(
+        'Development server only supports Web targets: web, web-mobile, web-pc'
+      );
+    }
     return {
       command,
+      ...(target === undefined ? {} : { target }),
       ...(options.has('--host') ? { host: options.get('--host') } : {}),
       ...(port === undefined ? {} : { port: parsePort(port) }),
       ...(options.has('--base') ? { base: options.get('--base') } : {}),
@@ -114,6 +133,7 @@ export async function runCli(
 
   if (args.command === 'dev') {
     const devOptions = {
+      ...(args.target === undefined ? {} : { target: args.target }),
       ...(args.host === undefined ? {} : { host: args.host }),
       ...(args.port === undefined ? {} : { port: args.port }),
       ...(args.base === undefined ? {} : { base: args.base }),
@@ -180,6 +200,7 @@ function assertSupportedOption(
     (command === 'create' && false) ||
     (command === 'dev' &&
       (name === '--host' ||
+        name === '--target' ||
         name === '--port' ||
         name === '--base' ||
         name === '--no-watch')) ||
@@ -194,15 +215,13 @@ function assertSupportedOption(
   }
 }
 
-function parseTarget(value: string | undefined): TargetType {
-  if (value === undefined || !isTargetType(value)) {
+function parseTarget(value: string | undefined): TargetInput {
+  if (value === undefined || normalizePlatform(value) === undefined) {
     throw parseError(
-      `Unknown target: ${value ?? ''}\nAvailable targets: ${TARGET_TYPES.join(
-        ', '
-      )}`
+      `Unknown target: ${value ?? ''}\nAvailable targets: ${PLATFORM_DEFINITIONS.map((definition) => definition.platform).join(', ')}`
     );
   }
-  return value;
+  return value as TargetInput;
 }
 
 function parsePort(value: string): number {

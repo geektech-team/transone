@@ -2,7 +2,7 @@ import type * as tsTypes from 'typescript';
 import { foldExpression } from './fold';
 import { mpError } from './errors';
 import { ClassSource, CompileContext } from './types';
-import { findMethod } from './wxml';
+import { moduleConstants, ownedMethod, parentSource } from './inheritance';
 
 /**
  * 编译 initState() 为小程序 data 初始值（JS 对象字面量源码）。
@@ -13,7 +13,9 @@ export function compileState(
   classSource: ClassSource
 ): string {
   const { ts } = context;
-  const method = findMethod(context, classSource, 'initState');
+  const owned = ownedMethod(context, classSource, 'initState');
+  const method = owned?.declaration;
+  if (owned) classSource = owned.owner;
   if (!method?.body) {
     return '{}';
   }
@@ -51,7 +53,44 @@ export function compileState(
   }
 
   const allConsts = new Map([...consts, ...locals]);
-  const value = foldExpression(ts, returnStatement.expression, allConsts);
+  const replaceSuper = (expression: tsTypes.Expression): tsTypes.Expression => {
+    const transformed = ts.transform(expression, [
+      (transformContext) => (node) => {
+        const visit = (current: tsTypes.Node): tsTypes.Node => {
+          if (
+            ts.isCallExpression(current) &&
+            ts.isPropertyAccessExpression(current.expression) &&
+            current.expression.expression.kind === ts.SyntaxKind.SuperKeyword &&
+            current.expression.name.text === 'initState' &&
+            current.arguments.length === 0
+          ) {
+            const parent = parentSource(context, classSource);
+            const text = parent ? compileState(context, parent) : '{}';
+            return ts
+              .createSourceFile(
+                'state.ts',
+                `(${text})`,
+                ts.ScriptTarget.Latest,
+                true
+              )
+              .statements.filter(ts.isExpressionStatement)[0].expression;
+          }
+          return ts.visitEachChild(current, visit, transformContext);
+        };
+        return ts.visitNode(node, visit) as tsTypes.Expression;
+      },
+    ]);
+    const result = transformed.transformed[0];
+    transformed.dispose();
+    return result;
+  };
+  for (const [name, value] of allConsts)
+    allConsts.set(name, replaceSuper(value));
+  const value = foldExpression(
+    ts,
+    replaceSuper(returnStatement.expression),
+    allConsts
+  );
   if (value === undefined) {
     throw mpError(
       classSource.filePath,
@@ -65,24 +104,5 @@ function collectModuleConsts(
   context: CompileContext,
   classSource: ClassSource
 ): Map<string, tsTypes.Expression> {
-  const consts = new Map<string, tsTypes.Expression>();
-  for (const statement of classSource.source.statements) {
-    if (!context.ts.isVariableStatement(statement)) {
-      continue;
-    }
-    const isConst =
-      statement.declarationList.flags & context.ts.NodeFlags.Const;
-    if (!isConst) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        context.ts.isIdentifier(declaration.name) &&
-        declaration.initializer
-      ) {
-        consts.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return consts;
+  return moduleConstants(context, classSource);
 }

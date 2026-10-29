@@ -1,11 +1,11 @@
-import { Component, h, slot, type VNode } from 'transone';
+import { BaseComponent, h, slot, type VNode } from 'transone';
 
 interface CardProps {
   title: string;
 }
 
 /** 通用卡片组件：演示 props + 插槽在 Web / 小程序双端的静态编译。 */
-export class Card extends Component<CardProps, object> {
+export class CardComponent extends BaseComponent<CardProps, object> {
   protected initState(): object {
     return {};
   }
@@ -47,3 +47,6 @@ export class Card extends Component<CardProps, object> {
     ]);
   }
 }
+
+// Existing pages keep their import while all platforms share this business identity.
+export { CardComponent as Card };

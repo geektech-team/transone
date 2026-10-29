@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import {
   basename,
+  dirname,
   extname,
   isAbsolute,
   relative,
@@ -15,6 +17,10 @@ import { createProxyHandler } from './proxy';
 import { assertSafeSubdirectory } from './safe-path';
 import { createFileWatcher, type FileWatcher } from './watch';
 import { buildWebBundle } from './web-bundle';
+import {
+  createWebComponentContext,
+  type WebComponentContext,
+} from './components/web';
 import type { ResolveConfigOptions, ResolvedConfig } from './types';
 
 const DEVELOPMENT_URL_PREFIX = '/dev';
@@ -24,6 +30,7 @@ const LIVE_RELOAD_PATH = '/__transone/reload';
 const DEVELOPMENT_OUTPUT_RETENTION_MS = 5_000;
 const WATCHED_EXTENSIONS = new Set([
   '.ts',
+  '.tsx',
   '.js',
   '.mjs',
   '.cjs',
@@ -120,13 +127,123 @@ function createProjectWatcher(
   instance: DevServerInstance,
   onChange: (changedPath: string) => Promise<void>
 ): FileWatcher {
-  return createFileWatcher({
-    root: instance.config.root,
-    isRelevant: (relativePath) => isWatchedFile(instance, relativePath),
-    onChange: (changedPath) => {
-      void onChange(changedPath);
+  const root = realpathSync(instance.config.root);
+  const watchers: FileWatcher[] = [];
+  try {
+    watchers.push(
+      createFileWatcher({
+        root,
+        isRelevant: (relativePath) => isWatchedFile(instance, relativePath),
+        onChange: (changedPath) => {
+          void onChange(changedPath);
+        },
+      })
+    );
+    for (const group of externalComponentWatchRoots(instance.config, root)) {
+      const excluded = (instance.config.components?.exclude ?? []).map(
+        (pattern) => new Bun.Glob(pattern.split(sep).join('/'))
+      );
+      watchers.push(
+        createFileWatcher({
+          root: group.root,
+          isRelevant: (relativePath) => {
+            const path = resolve(group.root, relativePath);
+            if (
+              isWithinOrEqual(root, path) ||
+              !['.ts', '.tsx'].includes(extname(path).toLowerCase()) ||
+              path.endsWith('.d.ts')
+            )
+              return false;
+            if (
+              path
+                .split(sep)
+                .some((segment) => IGNORED_WATCH_SEGMENTS.has(segment))
+            )
+              return false;
+            const portable = path.split(sep).join('/');
+            const fromApp = toRelativePath(root, path);
+            return (
+              group.patterns.some((pattern) => pattern.match(portable)) &&
+              !excluded.some(
+                (pattern) => pattern.match(fromApp) || pattern.match(portable)
+              )
+            );
+          },
+          onChange: (changedPath) => {
+            void onChange(
+              toRelativePath(root, resolve(group.root, changedPath))
+            );
+          },
+        })
+      );
+    }
+  } catch (error) {
+    watchers.forEach((watcher) => watcher.dispose());
+    throw error;
+  }
+  return {
+    dispose: () => {
+      watchers
+        .splice(0)
+        .reverse()
+        .forEach((watcher) => watcher.dispose());
     },
-  });
+  };
+}
+
+/** Watch explicit sibling scan roots even before their first variant exists. */
+function externalComponentWatchRoots(
+  config: ResolvedConfig,
+  appRoot: string
+): { root: string; patterns: Bun.Glob[] }[] {
+  const groups: { root: string; patterns: Bun.Glob[] }[] = [];
+  for (const include of config.components?.include ?? []) {
+    const absolute = resolve(config.root, include);
+    const wildcard = absolute.search(/[*?\[\]{}]/);
+    const prefix = wildcard < 0 ? absolute : absolute.slice(0, wildcard);
+    const directoryPattern =
+      wildcard < 0 &&
+      ((existsSync(absolute) && statSync(absolute).isDirectory()) ||
+        !extname(absolute));
+    let directory =
+      wildcard < 0
+        ? directoryPattern
+          ? absolute
+          : dirname(absolute)
+        : prefix.endsWith(sep)
+          ? prefix
+          : dirname(prefix);
+    while (!existsSync(directory)) {
+      const parent = dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+    if (!existsSync(directory) || !statSync(directory).isDirectory()) continue;
+    const canonical = realpathSync(directory);
+    if (isWithinOrEqual(appRoot, canonical)) continue;
+    const patternPath = directoryPattern
+      ? resolve(absolute, '**', '*')
+      : absolute;
+    const pattern = new Bun.Glob(
+      resolve(canonical, relative(directory, patternPath)).split(sep).join('/')
+    );
+    const parent = groups.find((group) =>
+      isWithinOrEqual(group.root, canonical)
+    );
+    if (parent) {
+      parent.patterns.push(pattern);
+      continue;
+    }
+    const nested = groups.filter((group) =>
+      isWithinOrEqual(canonical, group.root)
+    );
+    for (const group of nested) groups.splice(groups.indexOf(group), 1);
+    groups.push({
+      root: canonical,
+      patterns: [pattern, ...nested.flatMap((group) => group.patterns)],
+    });
+  }
+  return groups;
 }
 
 interface DevServerInstance {
@@ -146,6 +263,11 @@ async function createServerInstance(
   watch: boolean
 ): Promise<DevServerInstance> {
   const config = await resolveConfig(options);
+  if (config.target !== 'web') {
+    throw new Error(
+      'Development server only supports Web targets: web, web-mobile, web-pc'
+    );
+  }
   // 动态加载：project.ts 依赖 'transone/dom'（框架 dist 的 DOM 渲染
   // 模块），仅在需要预渲染页面 HTML 时加载，避免 dev/build 其他路径被拖累。
   const { renderProjectHtml } = await import('./project');
@@ -165,7 +287,8 @@ async function createServerInstance(
   const buildProject = createDevelopmentBuilder(
     sessionId,
     sessionOutDir,
-    artifacts
+    artifacts,
+    config
   );
   const liveReload = watch ? createLiveReloadHub() : undefined;
   const bundles = new Map<string, DevelopmentBundle>();
@@ -288,7 +411,8 @@ async function serveProjectRequest(
           scripts: [{ type: 'module', src: bundle.entry.pathname }],
         },
         entry,
-        route
+        route,
+        bundle.components
       );
       const html = await emitDevelopmentDocumentStyles(rendered, bundle);
       publishDevelopmentBundle(bundle, artifacts);
@@ -361,7 +485,8 @@ async function serveProjectRequest(
             scripts: [{ type: 'module', src: bundle.entry.pathname }],
           },
           config.entry,
-          '/'
+          '/',
+          bundle.components
         );
         const html = await emitDevelopmentDocumentStyles(rendered, bundle);
         publishDevelopmentBundle(bundle, artifacts);
@@ -524,6 +649,7 @@ interface DevelopmentOutput {
 }
 
 interface DevelopmentBundle {
+  components: WebComponentContext;
   outDir: string;
   generationUrl: string;
   activeRequests: number;
@@ -560,7 +686,8 @@ async function emitDevelopmentDocumentStyles(
 function createDevelopmentBuilder(
   sessionId: string,
   sessionOutDir: string,
-  artifacts: Map<string, DevelopmentOutput>
+  artifacts: Map<string, DevelopmentOutput>,
+  config: ResolvedConfig
 ): {
   build: (entry: string) => Promise<DevelopmentBundle | Response>;
   dispose: () => Promise<void>;
@@ -594,7 +721,12 @@ function createDevelopmentBuilder(
   function build(entry: string): Promise<DevelopmentBundle | Response> {
     const result = queue.then(async () => {
       if (disposed) return buildFailureResponse();
-      const bundle = await buildProjectBundle(entry, sessionId, sessionOutDir);
+      const bundle = await buildProjectBundle(
+        entry,
+        sessionId,
+        sessionOutDir,
+        config
+      );
       if (!(bundle instanceof Response)) {
         const previous = latestBundles.get(entry);
         latestBundles.set(entry, bundle);
@@ -643,7 +775,8 @@ async function removeDevelopmentBundle(
 async function buildProjectBundle(
   entry: string,
   sessionId: string,
-  sessionOutDir: string
+  sessionOutDir: string,
+  config: ResolvedConfig
 ): Promise<DevelopmentBundle | Response> {
   const generationId = createGenerationId();
   const generationOutDir = resolve(sessionOutDir, generationId);
@@ -665,7 +798,8 @@ async function buildProjectBundle(
 
   let success = false;
   try {
-    const { result, styles } = await buildWebBundle(buildOptions);
+    const components = createWebComponentContext(config, entry);
+    const { result, styles } = await buildWebBundle(buildOptions, components);
     const entryArtifact = result.outputs.find(isEntryJavaScriptOutput);
     if (!result.success || !entryArtifact) {
       result.logs.forEach((log) => console.error(log));
@@ -696,8 +830,8 @@ async function buildProjectBundle(
       outputs.set(output, developmentOutput);
     }
 
-    const entry = outputs.get(entryArtifact);
-    if (!entry) {
+    const entryOutput = outputs.get(entryArtifact);
+    if (!entryOutput) {
       throw new Error('Development entry output was not indexed');
     }
 
@@ -714,9 +848,10 @@ async function buildProjectBundle(
     success = true;
     return {
       outDir: generationOutDir,
+      components,
       generationUrl,
       activeRequests: 0,
-      entry,
+      entry: entryOutput,
       componentStylesheets,
       stylesheets: result.outputs
         .filter(isStylesheetOutput)

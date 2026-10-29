@@ -8,6 +8,7 @@ import {
 } from './fold';
 import { mpError } from './errors';
 import { ClassSource, CompileContext, warn } from './types';
+import { moduleConstants, ownedMethod, stableTag } from './inheritance';
 import { resolveClassReference, isComponentSubclass } from './analyze';
 
 /** 一个组件调用点通过 emitters 绑定的自定义事件。 */
@@ -237,7 +238,6 @@ const TAG_KEYS = new Set([
   'directions',
 ]);
 
-
 /** 显式传入的 undefined 字面量视为参数缺省（与 TS 运行时语义一致）。 */
 function notUndefined(
   ts: typeof tsTypes,
@@ -264,7 +264,9 @@ export function compileTemplate(
   hoverSelectors: Set<string> = new Set()
 ): CompiledTemplate {
   const { ts } = context;
-  const renderMethod = findMethod(context, classSource, 'render');
+  const owned = ownedMethod(context, classSource, 'render');
+  const renderMethod = owned?.declaration;
+  if (owned) classSource = owned.owner;
   if (!renderMethod) {
     throw mpError(
       classSource.filePath,
@@ -697,11 +699,16 @@ function compileConditional(
     env,
     depth + 1
   );
-  const lines = [indent(env.indent) + `<block ${context.dialect.directivePrefix}if="{{${condition}}}">`];
+  const lines = [
+    indent(env.indent) +
+      `<block ${context.dialect.directivePrefix}if="{{${condition}}}">`,
+  ];
   lines.push(...whenTrue.map((line) => indent(env.indent + 1) + line));
   lines.push(indent(env.indent) + '</block>');
   if (whenFalse.length > 0) {
-    lines.push(indent(env.indent) + `<block ${context.dialect.directivePrefix}else>`);
+    lines.push(
+      indent(env.indent) + `<block ${context.dialect.directivePrefix}else>`
+    );
     lines.push(...whenFalse.map((line) => indent(env.indent + 1) + line));
     lines.push(indent(env.indent) + '</block>');
   }
@@ -727,7 +734,8 @@ function compileLogicalAnd(
     depth + 1
   );
   return [
-    indent(env.indent) + `<block ${context.dialect.directivePrefix}if="{{${condition}}}">`,
+    indent(env.indent) +
+      `<block ${context.dialect.directivePrefix}if="{{${condition}}}">`,
     ...inner.map((line) => indent(env.indent + 1) + line),
     indent(env.indent) + '</block>',
   ];
@@ -972,7 +980,7 @@ function compileComponent(
       `createComponent 只接受 Component 子类: ${target.className}`
     );
   }
-  const tag = kebabCase(target.className);
+  const tag = stableTag(context, target);
   env.builder.usedComponents.set(tag, target);
 
   const attrs: string[] = [...env.extraAttrs];
@@ -1185,7 +1193,12 @@ function compileEmitterHandler(
     ts.isPropertyAccessExpression(handlerExpr) &&
     isThisExpression(ts, handlerExpr.expression)
   ) {
-    return { event: 'pending', method: handlerExpr.name.text, passArgs: true, key: '' };
+    return {
+      event: 'pending',
+      method: handlerExpr.name.text,
+      passArgs: true,
+      key: '',
+    };
   }
   if (!ts.isArrowFunction(handlerExpr)) {
     return undefined;
@@ -1598,26 +1611,7 @@ function collectModuleConsts(
   context: CompileContext,
   classSource: ClassSource
 ): Map<string, tsTypes.Expression> {
-  const consts = new Map<string, tsTypes.Expression>();
-  for (const statement of classSource.source.statements) {
-    if (!context.ts.isVariableStatement(statement)) {
-      continue;
-    }
-    const isConst =
-      statement.declarationList.flags & context.ts.NodeFlags.Const;
-    if (!isConst) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        context.ts.isIdentifier(declaration.name) &&
-        declaration.initializer
-      ) {
-        consts.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return consts;
+  return moduleConstants(context, classSource);
 }
 
 /** 收集从 transone 导入的本地名 -> 原始导出名（处理别名）。 */
@@ -1721,11 +1715,7 @@ export function findMethod(
   classSource: ClassSource,
   name: string
 ): tsTypes.MethodDeclaration | undefined {
-  const { ts } = context;
-  return classSource.declaration.members.find(
-    (member): member is tsTypes.MethodDeclaration =>
-      ts.isMethodDeclaration(member) && member.name.getText() === name
-  );
+  return ownedMethod(context, classSource, name)?.declaration;
 }
 
 export { kebabCase };

@@ -20,8 +20,16 @@ export type {
   UserMiniProgramConfig,
   MpTargetType,
   TargetType,
+  TargetInput,
+  ComponentScanConfig,
 } from './types';
-export { TARGET_TYPES, MP_TARGET_TYPES, isTargetType, isMpTargetType } from './target/types';
+export { Platform } from 'transone/platform';
+export {
+  TARGET_TYPES,
+  MP_TARGET_TYPES,
+  isTargetType,
+  isMpTargetType,
+} from './target/types';
 export type { BuildTarget } from './target/types';
 export { targetRegistry, TargetRegistry } from './target/registry';
 export { WebTarget } from './target/web-target';

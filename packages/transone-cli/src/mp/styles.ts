@@ -2,7 +2,7 @@ import type * as tsTypes from 'typescript';
 import { foldExpression, isThisExpression } from './fold';
 import { mpError } from './errors';
 import { ClassSource, CompileContext } from './types';
-import { findMethod } from './wxml';
+import { moduleConstants, ownedMethod, parentSource } from './inheritance';
 
 export interface CompiledStyles {
   /** 本单元作用域内的 WXSS（class 等选择器）。 */
@@ -48,34 +48,48 @@ export function compileStyles(
   classSource: ClassSource
 ): CompiledStyles {
   const { ts } = context;
-  const method = findMethod(context, classSource, 'initStyles');
-  if (!method?.body) {
-    return { style: '', global: '', hoverSelectors: new Set() };
-  }
-
-  const consts = collectModuleConsts(context, classSource);
-  const entries: StyleEntry[] = [];
-  for (const statement of method.body.statements) {
-    if (ts.isEmptyStatement(statement)) {
-      continue;
+  const entries = new Map<string, StyleEntry>();
+  const collect = (source: ClassSource): void => {
+    const owned = ownedMethod(context, source, 'initStyles');
+    if (!owned?.declaration.body) return;
+    const owner = owned.owner;
+    const consts = collectModuleConsts(context, owner);
+    for (const statement of owned.declaration.body.statements) {
+      if (ts.isEmptyStatement(statement)) continue;
+      if (!ts.isExpressionStatement(statement))
+        throw mpError(
+          owner.filePath,
+          'initStyles() 只支持 this.styleManager.addStyle(...) 与 super.initStyles() 调用'
+        );
+      const expression = statement.expression;
+      if (
+        ts.isCallExpression(expression) &&
+        ts.isPropertyAccessExpression(expression.expression) &&
+        expression.expression.expression.kind === ts.SyntaxKind.SuperKeyword &&
+        expression.expression.name.text === 'initStyles' &&
+        expression.arguments.length === 0
+      ) {
+        const parent = parentSource(context, owner);
+        if (parent) collect(parent);
+        continue;
+      }
+      const entry = addStyleEntry(context, owner, expression, consts);
+      if (entry && ts.isCallExpression(expression)) {
+        const name =
+          expression.arguments[0] &&
+          foldExpression(ts, expression.arguments[0], consts);
+        if (typeof name !== 'string')
+          throw mpError(owner.filePath, 'addStyle 名称必须能静态求值');
+        entries.set(name, entry);
+      }
     }
-    if (!ts.isExpressionStatement(statement)) {
-      throw mpError(
-        classSource.filePath,
-        'initStyles() 只支持 this.styleManager.addStyle(...) 调用'
-      );
-    }
-    const expression = statement.expression;
-    const entry = addStyleEntry(context, classSource, expression, consts);
-    if (entry) {
-      entries.push(entry);
-    }
-  }
+  };
+  collect(classSource);
 
   const local: string[] = [];
   const global: string[] = [];
   const hoverSelectors = new Set<string>();
-  for (const entry of entries) {
+  for (const entry of entries.values()) {
     const target = entry.selector === 'body' ? global : local;
     target.push(renderStyle(entry, context.lengthUnit));
     if (entry.hover && entry.selector !== 'body') {
@@ -291,24 +305,5 @@ function collectModuleConsts(
   context: CompileContext,
   classSource: ClassSource
 ): Map<string, tsTypes.Expression> {
-  const consts = new Map<string, tsTypes.Expression>();
-  for (const statement of classSource.source.statements) {
-    if (!context.ts.isVariableStatement(statement)) {
-      continue;
-    }
-    const isConst =
-      statement.declarationList.flags & context.ts.NodeFlags.Const;
-    if (!isConst) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        context.ts.isIdentifier(declaration.name) &&
-        declaration.initializer
-      ) {
-        consts.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return consts;
+  return moduleConstants(context, classSource);
 }

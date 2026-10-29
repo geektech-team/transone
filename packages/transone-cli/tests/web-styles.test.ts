@@ -91,6 +91,19 @@ afterEach(() => {
 });
 
 describe('Web component static styles', () => {
+  for (const declaration of [
+    "import {BaseComponent as Base} from 'transone';",
+    "import * as Framework from 'transone'; const Base = Framework.BaseComponent;",
+  ]) {
+    it(`extracts public BaseComponent roots through ${declaration}`, async () => {
+      const root = project({
+        'main.ts': `${declaration} class Fixed extends Base {initState(){return {}}initStyles(){this.styleManager.addStyle('fixed',{selector:'.base-component',properties:{color:'purple'}})}render(){return {tag:'div'}}} export function exercise(){return new Fixed().styleManager.styles.size}`,
+      });
+      const built = await bundle(root);
+      expect(built.css).toContain('.base-component');
+      expect(run(built.javascript)).toEqual({ value: 0, styles: [] });
+    });
+  }
   // Removing extraction must restore a runtime <style> and lose the CSS artifact.
   it('collects stylesheet CSS and leaves static components with no runtime style registration', async () => {
     const root = project({

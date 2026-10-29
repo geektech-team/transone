@@ -1,4 +1,13 @@
 import type { AppTargetType, MpTargetType, TargetType } from './target/types';
+import type { Platform, PlatformName } from 'transone/platform';
+
+/** CLI accepts canonical framework platforms and existing backend aliases. */
+export type TargetInput = PlatformName | TargetType;
+
+export interface ComponentScanConfig {
+  include?: string[];
+  exclude?: string[];
+}
 
 export type { MpTargetType, TargetType } from './target/types';
 export {
@@ -26,7 +35,8 @@ export interface AppConfig {
 /** 按原生 App 平台分组的配置。 */
 export type AppConfigMap = Partial<Record<AppTargetType, AppConfig>>;
 
-export type UserAppConfig = AppConfig | (AppConfigMap & Pick<AppConfig, 'host'>);
+export type UserAppConfig =
+  AppConfig | (AppConfigMap & Pick<AppConfig, 'host'>);
 
 export interface ResolvedAppConfig {
   /** 接口请求基础地址（http/https）；平台配置可覆盖。 */
@@ -90,7 +100,9 @@ export interface ResolvedMiniProgramConfig {
 }
 
 /** 按小程序平台分组的目标端配置：{ 'mp-weixin': {...}, 'mp-xiaohongshu': {...} }。 */
-export type MiniProgramConfigMap = Partial<Record<MpTargetType, MiniProgramConfig>>;
+export type MiniProgramConfigMap = Partial<
+  Record<MpTargetType, MiniProgramConfig>
+>;
 
 /** 公共字段直接放在 mp 下；平台配置递归覆盖公共字段，数组整体替换。 */
 export type UserMiniProgramConfig = MiniProgramConfig & MiniProgramConfigMap;
@@ -141,6 +153,8 @@ export interface ResolvedLibraryConfig {
 }
 
 export interface UserConfig {
+  target?: TargetInput;
+  components?: ComponentScanConfig;
   entry?: string;
   pages?: Record<string, string>;
   server?: ServerConfig;
@@ -161,7 +175,7 @@ export interface ResolveConfigOptions {
   /** 部署基础路径前缀（如 /transone/one），覆盖 config.build.basePath。 */
   base?: string;
   /** 编译目标端，默认 web。 */
-  target?: TargetType;
+  target?: TargetInput;
   /** 小程序产物目录，覆盖 config.mp.outDir。 */
   mpOutDir?: string;
 }
@@ -183,6 +197,9 @@ export interface ResolvedConfig {
   entry: string;
   pages: Record<string, string>;
   target: TargetType;
+  /** Canonical framework platform; target identifies the shared generator. */
+  platform: Platform;
+  components?: ComponentScanConfig;
   server: {
     host: string;
     port: number;

@@ -1,6 +1,7 @@
+import { createComponentInstance } from '../platform/bindings';
 import {
   Component,
-  ComponentConstructor,
+  ComponentReference,
   ComponentProps,
   InjectionKey,
   InjectionResult,
@@ -39,7 +40,7 @@ export interface AppOptions<
   TRootProps extends ComponentProps = ComponentProps,
 > {
   /** 根组件构造函数 */
-  root?: ComponentConstructor<TRootProps>;
+  root?: ComponentReference<TRootProps>;
   /** 根组件 props */
   rootProps?: TRootProps;
   /** 应用挂载点，默认 #app */
@@ -79,7 +80,7 @@ export class OneApp<
   constructor(private options: AppOptions<TState, TConfig, TRootProps> = {}) {
     this.appContext = {
       app: this as unknown as OneApp,
-      version: '0.4.0',
+      version: '0.8.0',
       config: options.config || ({} as TConfig),
     };
   }
@@ -142,7 +143,10 @@ export class OneApp<
 
       // 只有在有根组件时才创建实例
       if (this.options.root) {
-        this.rootInstance = new this.options.root(this.options.rootProps);
+        this.rootInstance = createComponentInstance(
+          this.options.root,
+          this.options.rootProps
+        );
 
         // 设置应用上下文
         if ('setAppContext' in this.rootInstance) {
@@ -223,9 +227,7 @@ export class OneApp<
   /**
    * 更新根组件
    */
-  public updateRootComponent(
-    component: ComponentConstructor<TRootProps>
-  ): void {
+  public updateRootComponent(component: ComponentReference<TRootProps>): void {
     if (this.mounted) {
       this.unmount();
     }

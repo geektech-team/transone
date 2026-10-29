@@ -125,6 +125,13 @@ export function foldExpression(
   if (ts.isObjectLiteralExpression(node)) {
     const result: Record<string, FoldedValue> = {};
     for (const property of node.properties) {
+      if (ts.isSpreadAssignment(property)) {
+        const spread = foldExpression(ts, property.expression, consts, seen);
+        if (!spread || typeof spread !== 'object' || Array.isArray(spread))
+          return undefined;
+        Object.assign(result, spread);
+        continue;
+      }
       if (ts.isPropertyAssignment(property)) {
         const key = propertyNameText(ts, property.name);
         const value = foldExpression(ts, property.initializer, consts, seen);

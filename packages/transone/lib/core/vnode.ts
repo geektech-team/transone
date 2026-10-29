@@ -1,6 +1,6 @@
 import type {
-  AnyComponentConstructor,
-  ComponentConstructor,
+  AnyComponentReference,
+  ComponentReference,
   ComponentEventListener,
   ComponentProps,
 } from './component';
@@ -16,7 +16,7 @@ type VNodeComponentProps = ComponentProps;
 
 export type VNodeComponentConstructor<
   P extends VNodeComponentProps = VNodeComponentProps,
-> = ComponentConstructor<P> | AnyComponentConstructor;
+> = ComponentReference<P> | AnyComponentReference;
 
 export type HTMLPropValue =
   | string
@@ -191,7 +191,7 @@ export const Th = createElementFactory('th');
 export const Td = createElementFactory('td');
 
 export interface ComponentDescriptor<P extends VNodeComponentProps> {
-  component: ComponentConstructor<P>;
+  component: ComponentReference<P>;
   props?: P;
   children?: Children;
   key?: string | number;
@@ -203,14 +203,14 @@ export function createComponent<P extends VNodeComponentProps>(
   options: ComponentDescriptor<P>
 ): ComponentNode<P>;
 export function createComponent<P extends VNodeComponentProps>(
-  componentClass: ComponentConstructor<P>,
+  componentClass: ComponentReference<P>,
   props?: P,
   children?: Children,
   key?: string | number,
   directions?: Directions
 ): ComponentNode<P>;
 export function createComponent<P extends VNodeComponentProps>(
-  componentOrOptions: ComponentConstructor<P> | ComponentDescriptor<P>,
+  componentOrOptions: ComponentReference<P> | ComponentDescriptor<P>,
   props?: P,
   children?: Children,
   key?: string | number,

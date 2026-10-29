@@ -197,21 +197,24 @@ export const cliCommandsPage: DocPage = {
       'text',
       `Usage:
   transone create
-  transone dev [--host <host>] [--port <port>] [--base <path>] [--no-watch]
+  transone dev [--target <web|web-mobile|web-pc>] [--host <host>] [--port <port>] [--base <path>] [--no-watch]
   transone build [--target <target>] [--out-dir <path>] [--base <path>] [--library]
 
-Targets: web, mp-weixin, mp-alipay, mp-bytedance, app-ios, app-android, app-harmony (default: web)`
+Targets: web, web-mobile, web-pc, miniprogram-weixin, miniprogram-alipay, miniprogram-bytedance, miniprogram-xiaohongshu, app-ios, app-android, app-harmony
+兼容 mp-* / app-* 旧名称；默认 web。`
     ),
     heading(2, 'transone create'),
-    paragraph('交互式创建项目骨架（不传参数、不可用选项）。已存在文件时拒绝覆盖。'),
+    paragraph('创建包含 AppComponent、共享 CardComponent、三类通用实现和六个具体端实现的项目，页面只引用业务基类。生成各端 dev/build 脚本；任一模板文件（含嵌套组件）已存在时拒绝整次覆盖。'),
     codeBlock('bash', `transone create
-# TransOne project created at /path/to/my-app (5 files)`),
+# TransOne project created at /path/to/my-app (16 files)`),
+    paragraph('框架导出 Platform 枚举及固定名称装饰器，例如 Platform.WebMobile = web-mobile、@WebMobile()。精确端实现优先，再回退到同族通用 @Web() / @Miniprogram() / @App()，最后回退到可实例化业务基类；冲突和已使用抽象基类缺少实现时会报错。通用小程序和 App 层仅参与组件选择，构建仍需指定具体端。'),
     heading(2, 'transone dev'),
     paragraph('开发产物写入 dist/dev/h5/<session>/<generation>。重建成功后，旧产物及其资源索引会在 5 秒后回收；仍在渲染页面的请求结束后才开始计时。构建失败会清理本次临时产物并保留上次成功版本；停止或重启服务器会清理当前会话目录。'),
     paragraph('可安全静态确定的组件样式与文档样式生成静态 CSS，通过 link 加载；依赖 props/state 的动态组件样式继续在运行时处理。CSS 与当前开发构建一起更新和回收。'),
     table(
       ['参数', '默认值', '说明'],
       [
+        ['--target <target>', '配置 target 或 web', '仅 web / web-mobile / web-pc；不在运行时根据 UA 切换。'],
         ['--host <host>', '127.0.0.1', '监听地址。'],
         ['--port <port>', '52211', '监听端口（0–65535 整数）。'],
         ['--base <path>', '（空）', '以子路径模式预览，与线上部署一致。'],
@@ -219,18 +222,24 @@ Targets: web, mp-weixin, mp-alipay, mp-bytedance, app-ios, app-android, app-harm
       ]
     ),
     codeBlock('bash', `transone dev --port 52311
+transone dev --target web-mobile
+transone dev --target web-pc
 transone dev --base /transone/ --no-watch`),
     heading(2, 'transone build'),
     table(
       ['参数', '默认值', '说明'],
       [
-        ['--target <target>', 'web', '目标端；未实现的端编译期报错。'],
+        ['--target <target>', '配置 target 或 web', 'Platform 中的具体端，兼容旧 mp-* / app-* 名称。'],
         ['--out-dir <path>', 'dist/build/h5', '产物输出目录。'],
         ['--base <path>', '（空）', '部署子路径（GitHub Pages 场景）。'],
         ['--library', 'false', '库构建：产出 ESM bundle + .d.ts（需 config.library）。'],
       ]
     ),
     codeBlock('bash', `transone build --target web
+transone build --target web-mobile
+transone build --target web-pc
+transone build --target miniprogram-weixin
+transone build --target app-ios
 transone build --target mp-weixin --out-dir dist/mp-wx
 transone build --target web --base /transone/
 transone build --library`),
@@ -256,10 +265,12 @@ export const cliConfigPage: DocPage = {
     ),
     codeBlock(
       'typescript',
-      `import { defineConfig } from 'transone-cli';
+      `import { Platform } from 'transone';
+import { defineConfig } from 'transone-cli';
 
 export default defineConfig({
   entry: 'src/main.ts',
+  target: Platform.Web,
   pages: {
     '/about': 'src/pages/about.ts',
   },
@@ -280,6 +291,8 @@ export default defineConfig({
     heading(2, '配置项'),
     apiTable('transone.config.ts 字段', [
       { name: 'entry', type: 'string', description: '应用入口，默认 src/main.ts；入口必须存在。' },
+      { name: 'target', type: 'Platform | TargetInput', description: '项目默认端；例如 Platform.WebMobile，CLI --target 优先，兼容旧 mp-* / app-*。' },
+      { name: 'components.include / exclude', type: 'string[]', description: '补充共享组件源码目录或排除文件；默认扫描 src 的 TS/TSX，不执行未选端模块。' },
       { name: 'pages', type: 'Record<string, string>', description: '多页映射：路由 → 页面入口；根路由由 entry 占用。' },
       { name: 'server.host / port / proxy', type: 'object', description: '开发服务器：地址、端口（默认 52211）与代理前缀映射。' },
       { name: 'build.outDir', type: 'string', description: '构建输出目录，默认 dist/build/h5。' },
@@ -290,7 +303,7 @@ export default defineConfig({
     ]),
     heading(2, '解析与覆盖'),
     ul([
-      [strong('默认值：'), 'entry=src/main.ts、target=web、outDir=dist、basePath=空、directoryPages=false。'],
+      [strong('默认值：'), 'entry=src/main.ts、target=web、outDir=dist/build/h5、basePath=空、directoryPages=false；mobile/pc 默认使用各自的输出目录。'],
       [strong('覆盖顺序：'), 'CLI 参数（--target / --out-dir / --base / --host / --port 等）覆盖 transone.config.ts，配置覆盖默认值。'],
       [strong('动态求值：'), '配置在 Node/Bun 环境求值，可读取环境变量或按平台分支（文档站即用 process.env 切换 base）。'],
     ]),

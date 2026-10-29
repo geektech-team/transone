@@ -12,7 +12,11 @@
     "build:ios": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-ios",
     "build:android": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-android",
     "build:harmony": "env -u BUN_INSPECT -u BUN_INSPECT_BREAK -u VSCODE_INSPECTOR_OPTIONS NODE_OPTIONS= transone build --target app-harmony",
-    "preview": "bun scripts/preview.ts"
+    "preview": "bun scripts/preview.ts",
+    "dev:mobile": "transone dev --target web-mobile",
+    "dev:pc": "transone dev --target web-pc",
+    "build:mobile": "transone build --target web-mobile",
+    "build:pc": "transone build --target web-pc"
   },
   "dependencies": {
     "transone": "workspace:*"

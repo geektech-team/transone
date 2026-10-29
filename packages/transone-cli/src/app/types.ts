@@ -25,6 +25,7 @@ export type NativeTextPart =
   | { kind: 'state'; key: string };
 
 export type NativeAction =
+  | { kind: 'sequence'; actions: NativeAction[] }
   | { kind: 'increment'; key: string; by: number }
   | { kind: 'set-literal'; key: string; value: NativeStateValue };
 

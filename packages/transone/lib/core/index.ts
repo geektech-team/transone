@@ -7,3 +7,4 @@ export * from './renderer';
 export * from './document';
 export * from './model';
 export * from './form';
+export { createComponentInstance } from '../platform/bindings';

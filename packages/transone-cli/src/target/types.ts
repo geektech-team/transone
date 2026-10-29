@@ -1,5 +1,6 @@
 import type { ResolvedConfig } from '../types';
 import type { BuildOptions, BuildResult } from '../types';
+import { PLATFORM_DEFINITIONS, type BackendTarget } from 'transone/platform';
 
 /**
  * 目标端类型。
@@ -12,18 +13,11 @@ import type { BuildOptions, BuildResult } from '../types';
  * - mp-xiaohongshu XHSML / CSS 静态转换
  * - app-*          原生应用源码生成（app-ios / app-android / app-harmony）
  */
-export const TARGET_TYPES = [
-  'web',
-  'mp-weixin',
-  'mp-alipay',
-  'mp-bytedance',
-  'mp-xiaohongshu',
-  'app-ios',
-  'app-android',
-  'app-harmony',
-] as const;
+export const TARGET_TYPES: readonly BackendTarget[] = [
+  ...new Set(PLATFORM_DEFINITIONS.map((definition) => definition.target)),
+];
 
-export type TargetType = (typeof TARGET_TYPES)[number];
+export type TargetType = BackendTarget;
 
 export function isTargetType(value: unknown): value is TargetType {
   return (
@@ -33,23 +27,16 @@ export function isTargetType(value: unknown): value is TargetType {
 }
 
 /** 小程序目标端类型（mp-*），config.mp 按平台分组时使用。 */
-export const MP_TARGET_TYPES = [
-  'mp-weixin',
-  'mp-alipay',
-  'mp-bytedance',
-  'mp-xiaohongshu',
-] as const satisfies readonly TargetType[];
-
-export type MpTargetType = (typeof MP_TARGET_TYPES)[number];
+export type MpTargetType = Extract<TargetType, `mp-${string}`>;
+export const MP_TARGET_TYPES: readonly MpTargetType[] = TARGET_TYPES.filter(
+  (target): target is MpTargetType => target.startsWith('mp-')
+);
 
 /** 原生 App 目标端类型（app-*）。 */
-export const APP_TARGET_TYPES = [
-  'app-ios',
-  'app-android',
-  'app-harmony',
-] as const satisfies readonly TargetType[];
-
-export type AppTargetType = (typeof APP_TARGET_TYPES)[number];
+export type AppTargetType = Extract<TargetType, `app-${string}`>;
+export const APP_TARGET_TYPES: readonly AppTargetType[] = TARGET_TYPES.filter(
+  (target): target is AppTargetType => target.startsWith('app-')
+);
 
 export function isAppTargetType(value: unknown): value is AppTargetType {
   return (

@@ -1,4 +1,4 @@
-import type { NativeDialect, NativeNode, NativeScreen, NativeTextPart } from './types';
+import type { NativeAction, NativeDialect, NativeNode, NativeScreen, NativeTextPart } from './types';
 
 function text(parts: NativeTextPart[], language: 'swift' | 'kotlin' | 'ark'): string {
   if (language === 'swift') {
@@ -11,7 +11,10 @@ function text(parts: NativeTextPart[], language: 'swift' | 'kotlin' | 'ark'): st
   return parts.map((part) => part.kind === 'literal' ? JSON.stringify(part.value) : `this.${part.key}`).join(' + ') || '""';
 }
 function action(node: Extract<NativeNode, { kind: 'button' }>, language: 'swift' | 'kotlin' | 'ark'): string {
-  const { action } = node;
+  return nativeAction(node.action, language);
+}
+function nativeAction(action: NativeAction, language: 'swift' | 'kotlin' | 'ark'): string {
+  if (action.kind === 'sequence') return action.actions.map(item => nativeAction(item, language)).join('; ');
   const target = language === 'ark' ? `this.${action.key}` : action.key;
   return action.kind === 'increment' ? `${target} ${action.by >= 0 ? '+=' : '-='} ${Math.abs(action.by)}` : `${target} = ${typeof action.value === 'string' ? JSON.stringify(action.value) : action.value}`;
 }

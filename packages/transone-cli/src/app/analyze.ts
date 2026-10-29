@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { composeNativeScreen } from './components';
+import type { ResolvedConfig } from '../types';
 import type * as tsTypes from 'typescript';
 import { loadTypescript } from '../mp/ts-loader';
 import { nativeError } from './errors';
@@ -8,8 +10,9 @@ const CONTAINERS = new Set(['view', 'main', 'div']);
 const TEXT = new Set(['text', 'span', 'p', 'h1']);
 const STYLE_KEYS = new Set(['color', 'backgroundColor', 'fontSize', 'fontWeight', 'padding', 'margin', 'width', 'height', 'borderRadius', 'textAlign']);
 
-export async function analyzeNativeScreen(entry: string): Promise<NativeScreen> {
+export async function analyzeNativeScreen(entry: string, config?: ResolvedConfig): Promise<NativeScreen> {
   if (!existsSync(entry)) throw nativeError(entry, '源文件不存在');
+  if (config) { const screen = composeNativeScreen(entry, config); if (screen) return screen; }
   const ts = await loadTypescript();
   const source = ts.createSourceFile(entry, readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
   const component = source.statements.find((s): s is tsTypes.ClassDeclaration => ts.isClassDeclaration(s));

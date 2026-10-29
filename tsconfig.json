@@ -9,6 +9,7 @@
     "baseUrl": ".",
     "paths": {
       "transone": ["packages/transone/lib/index.ts"],
+      "transone/platform": ["packages/transone/lib/platform/index.ts"],
       "transone/router": ["packages/transone/lib/router/index.ts"],
       "transone/style": ["packages/transone/lib/style/index.ts"],
       "transone/dom": ["packages/transone/lib/dom/index.ts"],

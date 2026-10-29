@@ -4,6 +4,10 @@ import { isEntryJavaScriptOutput, isStylesheetOutput } from '../build-output';
 import { emitComponentStyles, emitDocumentStyles } from '../document-styles';
 import { assertSafeSubdirectoryDoesNotContain } from '../safe-path';
 import { buildWebBundle } from '../web-bundle';
+import {
+  createWebComponentContext,
+  type WebComponentContext,
+} from '../components/web';
 import type { BuildOptions, BuildResult, ResolvedConfig } from '../types';
 import type { BuildTarget } from './types';
 
@@ -45,8 +49,11 @@ export class WebTarget implements BuildTarget {
     // 动态加载：project.ts 依赖 'transone/dom'（框架 dist 的 DOM
     // 渲染模块），仅在站点渲染路径需要。
     const { renderProjectHtml } = await import('../project');
+    const contexts = new Map(
+      entries.map((entry) => [entry, createWebComponentContext(config, entry)])
+    );
     for (const [route, entry] of Object.entries(config.pages)) {
-      await renderProjectHtml(config, {}, entry, route);
+      await renderProjectHtml(config, {}, entry, route, contexts.get(entry));
     }
 
     await rm(config.build.outDir, { recursive: true, force: true });
@@ -55,7 +62,7 @@ export class WebTarget implements BuildTarget {
     const builtByEntry = new Map<string, BuiltPage>();
     const failures: string[] = [];
     for (const entry of entries) {
-      const built = await buildPage(config, entry);
+      const built = await buildPage(config, entry, contexts.get(entry));
       if (typeof built === 'string') {
         failures.push(built);
         continue;
@@ -89,7 +96,8 @@ export class WebTarget implements BuildTarget {
           })),
         },
         page.entry,
-        route
+        route,
+        contexts.get(entry)
       );
       const { html, assets: documentStyles } = await emitDocumentStyles(
         rendered,
@@ -117,21 +125,25 @@ export class WebTarget implements BuildTarget {
 
 async function buildPage(
   config: ResolvedConfig,
-  entry: string
+  entry: string,
+  components?: WebComponentContext
 ): Promise<BuiltPage | string> {
   let result: Awaited<ReturnType<typeof buildWebBundle>>['result'];
   let styles: ReadonlyMap<string, string>;
   try {
-    const bundle = await buildWebBundle({
-      entrypoints: [entry],
-      outdir: config.build.outDir,
-      target: 'browser',
-      format: 'esm',
-      // 生产构建默认压缩；TRANSONE_MINIFY=0 时生成未压缩产物，便于排查问题
-      minify: process.env.TRANSONE_MINIFY !== '0',
-      naming: { entry: '[name]-[hash].[ext]', chunk: '[name]-[hash].[ext]' },
-      throw: false,
-    });
+    const bundle = await buildWebBundle(
+      {
+        entrypoints: [entry],
+        outdir: config.build.outDir,
+        target: 'browser',
+        format: 'esm',
+        // 生产构建默认压缩；TRANSONE_MINIFY=0 时生成未压缩产物，便于排查问题
+        minify: process.env.TRANSONE_MINIFY !== '0',
+        naming: { entry: '[name]-[hash].[ext]', chunk: '[name]-[hash].[ext]' },
+        throw: false,
+      },
+      components
+    );
     result = bundle.result;
     styles = bundle.styles;
   } catch (error: unknown) {

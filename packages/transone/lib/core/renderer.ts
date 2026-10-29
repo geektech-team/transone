@@ -1,4 +1,9 @@
-import type { ComponentEventListener, ComponentProps } from './component/base';
+import type {
+  ComponentEventListener,
+  ComponentProps,
+  ComponentReference,
+} from './component/base';
+import { createComponentInstance } from '../platform/bindings';
 import {
   ComponentNode,
   SlotProvider,
@@ -126,10 +131,10 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
       return document.createComment('if');
     }
 
-    const ComponentClass = vnode.component as new (
-      props?: ComponentProps
-    ) => ComponentInstance;
-    const instance = new ComponentClass(this.createProps(vnode));
+    const instance = createComponentInstance(
+      vnode.component as ComponentReference,
+      this.createProps(vnode)
+    );
 
     if (context.appContext && instance.setAppContext) {
       instance.setAppContext(context.appContext);
