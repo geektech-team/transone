@@ -132,8 +132,19 @@ Web 的 root、嵌套组件、路由和 document.body 共用同一个实例化�
 
 跨文件继承保留成员声明来源，父类常量、工具函数和 import 不会误用子类作用域。
 小程序/原生编译支持其静态子集内的 `super`，超出子集的语句会明确报错。
-Component 构造器会调用 initState/initStyles，子类字段此时尚未初始化；
-不要在这两个钩子里读取依赖子类字段初始化的值。
+Component 构造器不再调用 `initState/initStyles`。Web 运行时在首次读取 `state`
+或首次挂载时同步初始化状态，在挂载的 `beforeMount` 之前初始化样式。
+正常构造完成后，这两个钩子可以读取子类字段；现有钩子和直接 `new` 的写法保持可用。
+若在字段初始化器或父类自定义构造器中主动读取 `state`，仍需遵守 JavaScript 的字段初始化顺序，
+不能依赖尚未执行的后续字段初始化。
+小程序/App 支持其纯表达式子集内的实例字段：父到子、类内声明顺序初始化，
+普通无初始化字段覆盖为 `undefined`，`declare/static` 不参与实例初始化。
+字段和 `initState` 可以读取初始 props，后续 props 更新不会重建字段或重置 state；直接 props 绑定继续更新。
+小程序在宿主真实 props 就绪后初始化：微信/抖音/小红书使用 `attached`，支付宝使用 `onInit`。
+App 支持静态可分析的 props 和父 state 初始标量值，原生 state 落点仍限于字符串、布尔值和有限数字。
+字段可供 `initState`、静态模板/样式及受支持的方法读取；无法表示的调用、
+构造器、早期 state 读取和不安全的可变快照会明确报错。
+详见[字段初始化范围](./reliability.md#小程序与-app-实例字段)。
 
 ## 扫描、开发与样式
 

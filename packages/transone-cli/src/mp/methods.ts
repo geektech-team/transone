@@ -9,6 +9,7 @@ import {
 import { MethodModuleLinker } from './inline';
 import { mpError } from './errors';
 import { ClassSource, CompileContext, FunctionEntry, UnitKind } from './types';
+import type { InstanceFieldPlan } from '../components/instance-fields';
 
 const PAGE_LIFECYCLE: Record<string, string> = {
   beforeMount: 'onLoad',
@@ -35,6 +36,8 @@ export interface CompiledMethods {
   methods: FunctionEntry[];
   lifecycle: FunctionEntry[];
   inlineModules?: string[];
+  initialization?: string;
+  initializationWritesState?: boolean;
 }
 
 /**
@@ -50,8 +53,10 @@ export function compileMethods(
   classSource: ClassSource,
   usedNames: Set<string>,
   kind: UnitKind,
-  customEvents: Set<string>
+  customEvents: Set<string>,
+  fields?: InstanceFieldPlan
 ): CompiledMethods {
+  const { ts } = context;
   const methods = new Map(
     ownedMethods(context, classSource).map((item) => [
       item.declaration.name.getText(item.owner.source),
@@ -76,6 +81,10 @@ export function compileMethods(
 
   const lifecycleMap = kind === 'page' ? PAGE_LIFECYCLE : COMPONENT_LIFECYCLE;
   const seed = new Set(usedNames);
+  const runtimeInitialization =
+    !!fields &&
+    (fields.entries.length > 0 || fields.usesProps || !!classSource.rootProps);
+  if (runtimeInitialization && methods.has('initState')) seed.add('initState');
   for (const hook of Object.keys(lifecycleMap)) {
     if (methods.has(hook)) {
       seed.add(hook);
@@ -122,7 +131,10 @@ export function compileMethods(
       customEvents,
       queue,
       resolveSuper,
-      linker
+      linker,
+      runtimeInitialization &&
+        owned.declaration.name.getText(owned.owner.source) === 'initState',
+      runtimeInitialization
     );
     if (lifecycleKey) {
       lifecycleEntries.push({ key, fn });
@@ -131,10 +143,79 @@ export function compileMethods(
     }
   }
 
+  let initialization: string | undefined;
+  if (fields && runtimeInitialization) {
+    const printer = ts.createPrinter();
+    const statements = fields.entries.map((entry) => {
+      const expression =
+        entry.declaration.initializer ?? ts.factory.createVoidZero();
+      let linked = linker
+        ? linker.rewrite(expression, entry.owner.source)
+        : expression;
+      const result = ts.transform(linked, [
+        (ctx) => (root) => {
+          const visit = (node: tsTypes.Node): tsTypes.Node => {
+            if (
+              ts.isPropertyAccessExpression(node) &&
+              node.expression.kind === ts.SyntaxKind.ThisKeyword &&
+              node.name.text === 'props'
+            )
+              return ts.factory.createPropertyAccessExpression(
+                ts.factory.createThis(),
+                '__transone_initial_props'
+              );
+            if (
+              ts.isElementAccessExpression(node) &&
+              node.expression.kind === ts.SyntaxKind.ThisKeyword &&
+              ts.isStringLiteralLike(node.argumentExpression) &&
+              node.argumentExpression.text === 'props'
+            )
+              return ts.factory.createPropertyAccessExpression(
+                ts.factory.createThis(),
+                '__transone_initial_props'
+              );
+            return ts.visitEachChild(node, visit, ctx);
+          };
+          return ts.visitNode(root, visit) as tsTypes.Expression;
+        },
+      ]);
+      linked = result.transformed[0];
+      result.dispose();
+      return `Object.defineProperty(this, ${JSON.stringify(entry.name)}, { value: ${printer.printNode(ts.EmitHint.Expression, linked, entry.owner.source)}, writable: true, configurable: true, enumerable: true });`;
+    });
+    initialization = ts
+      .transpileModule(
+        `function() { ${statements.join('\n')} return typeof this.initState === 'function' ? (this.initState() ?? {}) : {}; }`,
+        { compilerOptions: { target: ts.ScriptTarget.ES2020 } }
+      )
+      .outputText.trim();
+  }
+  let initializationWritesState = false;
+  for (const entry of [...entries, ...lifecycleEntries]) {
+    const source = ts.createSourceFile(
+      'method.ts',
+      `(${entry.fn})`,
+      ts.ScriptTarget.Latest,
+      true
+    );
+    const visit = (node: tsTypes.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        node.expression.name.text === 'setData'
+      )
+        initializationWritesState = true;
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
   return {
     methods: entries,
     lifecycle: lifecycleEntries,
     inlineModules: linker?.modules(),
+    initialization,
+    initializationWritesState,
   };
 }
 
@@ -146,7 +227,9 @@ function compileMethod(
   customEvents: Set<string>,
   referencedMethods: string[],
   resolveSuper: (owner: ClassSource, name: string) => string,
-  linker?: MethodModuleLinker
+  linker?: MethodModuleLinker,
+  preserveConstants = false,
+  runtimeInitialization = false
 ): string {
   const { ts } = context;
   if (!declaration.body) {
@@ -180,7 +263,9 @@ function compileMethod(
     declaration.body
   );
 
-  const consts = collectModuleConsts(context, classSource);
+  const consts = preserveConstants
+    ? new Map<string, tsTypes.Expression>()
+    : collectModuleConsts(context, classSource);
   const locals = new Set<string>();
   const transformerFactory: tsTypes.TransformerFactory<
     tsTypes.FunctionExpression
@@ -194,6 +279,8 @@ function compileMethod(
         locals,
         referencedMethods,
         resolveSuper,
+        initialProps: preserveConstants,
+        runtimeInitialization,
       }) as tsTypes.FunctionExpression;
   };
   const result = ts.transform(functionExpression, [transformerFactory]);
@@ -222,6 +309,8 @@ function compileMethod(
 }
 
 interface VisitState {
+  initialProps: boolean;
+  runtimeInitialization: boolean;
   transformContext: tsTypes.TransformationContext;
   kind: UnitKind;
   customEvents: Set<string>;
@@ -363,25 +452,39 @@ function visit(
     }
   }
 
-  // this.state -> this.data；this.props -> this.properties
+  // Both property and static bracket forms use the platform bridges.
   if (
-    ts.isPropertyAccessExpression(node) &&
+    (ts.isPropertyAccessExpression(node) ||
+      (ts.isElementAccessExpression(node) &&
+        ts.isStringLiteralLike(node.argumentExpression))) &&
     isThisExpression(ts, node.expression)
   ) {
-    if (node.name.text === 'state') {
+    const key = ts.isPropertyAccessExpression(node)
+      ? node.name.text
+      : (node.argumentExpression as tsTypes.StringLiteral).text;
+    if (key === 'state') {
+      if (state.runtimeInitialization)
+        return ts.factory.createCallExpression(
+          ts.factory.createIdentifier('__transone_state'),
+          undefined,
+          [ts.factory.createThis()]
+        );
       return ts.factory.createPropertyAccessExpression(
         ts.factory.createThis(),
         'data'
       );
     }
-    if (node.name.text === 'props') {
-      if (state.kind !== 'component') {
-        throw mpError(classSource.filePath, '页面组件不能访问 this.props');
-      }
-      return ts.factory.createPropertyAccessExpression(
-        ts.factory.createThis(),
-        'properties'
-      );
+    if (key === 'props') {
+      return state.initialProps
+        ? ts.factory.createPropertyAccessExpression(
+            ts.factory.createThis(),
+            '__transone_initial_props'
+          )
+        : ts.factory.createCallExpression(
+            ts.factory.createIdentifier('__transone_props'),
+            undefined,
+            [ts.factory.createThis()]
+          );
     }
   }
 

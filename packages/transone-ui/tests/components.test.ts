@@ -89,8 +89,8 @@ describe('TuSwitch', () => {
     const switchComp = new TuSwitch({ checked: false });
     const { container, dispose } = mount(switchComp);
     disposers.push(dispose);
-    const values: boolean[] = [];
-    switchComp.on('change', (v: boolean) => {
+    const values: unknown[] = [];
+    switchComp.on('change', (v) => {
       values.push(v);
     });
 
@@ -127,8 +127,8 @@ describe('TuTag', () => {
     const tag = new TuTag({ closable: true, name: 'tag-1', children: ['标签'] });
     const { container, dispose } = mount(tag);
     disposers.push(dispose);
-    const names: Array<string | number | undefined> = [];
-    tag.on('close', (name: string | number | undefined) => {
+    const names: unknown[] = [];
+    tag.on('close', (name) => {
       names.push(name);
     });
 
@@ -189,8 +189,8 @@ describe('TuInput', () => {
     const inputComp = new TuInput({ value: '初始' });
     const { container, dispose } = mount(inputComp);
     disposers.push(dispose);
-    const values: string[] = [];
-    inputComp.on('input', (v: string) => {
+    const values: unknown[] = [];
+    inputComp.on('input', (v) => {
       values.push(v);
     });
 
@@ -204,8 +204,8 @@ describe('TuInput', () => {
     const inputComp = new TuInput({ value: 'hello', clearable: true });
     const { container, dispose } = mount(inputComp);
     disposers.push(dispose);
-    const values: string[] = [];
-    inputComp.on('input', (v: string) => {
+    const values: unknown[] = [];
+    inputComp.on('input', (v) => {
       values.push(v);
     });
 

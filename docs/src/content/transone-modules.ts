@@ -72,13 +72,19 @@ export const transoneApplicationPage: DocPage = {
     ]),
     heading(2, '组件基类 Component<TProps, TState>'),
     paragraph(
-      '组件构造时自动把',
+      '组件父构造器不调用初始化钩子；首次读取 state（或首次挂载）时同步把',
       inlineCode('initState()'),
-      ' 的结果包装为响应式 state，并创建私有',
+      ' 的结果包装为响应式 state。私有',
       inlineCode('StyleManager'),
-      '；首次',
+      ' 在构造时创建，initStyles 在每次挂载的 beforeMount 之前执行。构造完成后，初始化钩子可以读取子类字段；直接 new 后读取 state 无需异步等待。首次',
       inlineCode('mount'),
       ' 时建立渲染 effect——依赖在 render 期间按需收集（细粒度），state 中未被访问的属性变化不会触发重渲染。',
+    ),
+    paragraph(
+      '若在字段初始化器或父类自定义构造器中提前读取 state，仍不能依赖尚未初始化的后续字段。卸载未使用的实例不会执行初始化；重新挂载保留状态并重建样式。小程序和原生 App 支持纯表达式实例字段：取得初始 props 后，按父到子、声明顺序初始化字段，再执行 initState；declare/static 不参与实例初始化。字段和初始 state 可以读取 props，后续 props 更新不会重新初始化，直接 props 绑定继续更新。',
+    ),
+    paragraph(
+      '小程序在真实 props 就绪后初始化：微信/抖音/小红书组件使用 attached，支付宝组件使用 onInit；页面使用 onLoad 和 rootProps。App 支持静态可分析的 props 与父 state 初始标量快照，原生 state 落点仍限于字符串、布尔值和有限数字。副作用调用、自定义构造器、早期 state 读取及不能表示的动态对象或可变快照会明确报错。',
     ),
     apiTable('组件公开 API', [
       { name: 'initState / initStyles / render', type: 'protected 抽象', description: '初始化 state、注册样式、返回 VNode。' },

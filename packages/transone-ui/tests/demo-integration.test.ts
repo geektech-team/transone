@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { flushSync } from 'transone';
 import { UiDemoPage } from '../../../playground/ui-demo/src/pages/home';
 
 /**
@@ -45,12 +44,16 @@ describe('UiDemoPage 集成', () => {
     const counterButton = buttons.find((b) => (b.textContent ?? '').includes('计数'))!;
     expect(counterButton).toBeTruthy();
     expect(textOf(counterButton)).toContain('计数：0');
+    const cellValue = container.querySelector('.tu-cell__value')!;
+    expect(textOf(cellValue)).toBe('0');
 
     click(counterButton);
     expect(textOf(counterButton)).toContain('计数：1');
+    expect(textOf(cellValue)).toBe('1');
 
     click(counterButton);
     expect(textOf(counterButton)).toContain('计数：2');
+    expect(textOf(cellValue)).toBe('2');
   });
 
   it('Switch 受控切换并联动禁用按钮', () => {

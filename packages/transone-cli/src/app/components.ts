@@ -6,6 +6,11 @@ import {
   type ComponentIndex,
   type OwnedMember,
 } from '../components';
+import {
+  analyzeInstanceFields,
+  type InstanceFieldPlan,
+  type InstanceFieldValue,
+} from '../components/instance-fields';
 import type { ResolvedConfig } from '../types';
 import { nativeError } from './errors';
 import type {
@@ -19,11 +24,17 @@ import type {
 
 type Binding =
   { kind: 'literal'; value: NativeStateValue } | { kind: 'state'; key: string };
+type PropBinding =
+  | { kind: 'literal'; value: InstanceFieldValue }
+  | { kind: 'state'; key: string };
 interface Instance {
   reference: ClassReference;
   prefix: string;
   state: Map<string, string>;
-  props: Map<string, Binding>;
+  props: Map<string, PropBinding>;
+  fields: InstanceFieldPlan;
+  stateRoot?: Record<string, InstanceFieldValue>;
+  propsStateRoot?: boolean;
 }
 const CONTAINERS = new Set(['view', 'main', 'div']);
 const TEXT = new Set(['text', 'span', 'p', 'h1']);
@@ -321,19 +332,39 @@ class NativeComposer {
     );
   }
   screen(reference: ClassReference, props?: ts.Expression): NativeScreen {
-    const bindings = new Map<string, Binding>();
+    const bindings = new Map<string, PropBinding>();
+    const evaluator = analyzeInstanceFields([], this.fieldOptions());
     if (props)
       for (const p of object(props, 'rootProps').properties) {
         if (!ts.isPropertyAssignment(p)) fail(p, 'rootProps 只支持静态属性');
+        if (name(p.name) === '__proto__') fail(p, 'rootProps 不支持原型属性');
         bindings.set(name(p.name), {
           kind: 'literal',
-          value: this.literal(p.initializer),
+          value: evaluator.evaluate(p.initializer),
         });
       }
     const root = this.instance(reference, bindings);
     if (root.kind !== 'container')
       fail(reference.declaration, '根节点必须是容器节点');
     return { name: reference.className, state: this.state, root };
+  }
+  private fieldOptions(props?: Readonly<Record<string, InstanceFieldValue>>) {
+    return {
+      resolve: (
+        node:
+          | ts.Identifier
+          | ts.PropertyAccessExpression
+          | ts.ElementAccessExpression
+      ) => {
+        const declaration = this.index.symbolAt(node)?.valueDeclaration;
+        return declaration && ts.isVariableDeclaration(declaration)
+          ? declaration
+          : undefined;
+      },
+      sources: this.index.sources,
+      props,
+      fail,
+    };
   }
   private member(
     reference: ClassReference,
@@ -363,11 +394,16 @@ class NativeComposer {
   }
   private literal(
     expression: ts.Expression,
-    seen = new Set<ts.Node>()
+    instance?: Instance,
+    seen = new Set<ts.Node>(),
+    initialProps = false
   ): NativeStateValue {
     const node = unwrap(expression);
+    if (instance) this.rejectStateAliasRead(node, instance);
+    if (instance && !initialProps) this.rejectDynamicPropsRead(node, instance);
     if (ts.isStringLiteralLike(node)) return node.text;
-    if (ts.isNumericLiteral(node)) return Number(node.text);
+    if (ts.isNumericLiteral(node))
+      return this.nativeValue(Number(node.text), node);
     if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
     if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
     if (
@@ -375,7 +411,7 @@ class NativeComposer {
       (node.operator === ts.SyntaxKind.MinusToken ||
         node.operator === ts.SyntaxKind.PlusToken)
     ) {
-      const value = this.literal(node.operand, seen);
+      const value = this.literal(node.operand, instance, seen, initialProps);
       if (typeof value === 'number')
         return node.operator === ts.SyntaxKind.MinusToken ? -value : value;
     }
@@ -389,41 +425,157 @@ class NativeComposer {
         declaration.parent.flags & ts.NodeFlags.Const
       ) {
         if (seen.has(declaration)) fail(node, '常量引用循环');
+        let scope: ts.Node | undefined = declaration.parent;
+        while (scope && !ts.isSourceFile(scope) && !ts.isFunctionLike(scope))
+          scope = scope.parent;
+        if (scope && ts.isSourceFile(scope)) {
+          const check = (child: ts.Node): void => {
+            if (child.kind === ts.SyntaxKind.ThisKeyword)
+              fail(child, '模块常量初始化不能读取组件 this');
+            ts.forEachChild(child, check);
+          };
+          check(declaration.initializer);
+        }
         return this.literal(
           declaration.initializer,
-          new Set([...seen, declaration])
+          instance,
+          new Set([...seen, declaration]),
+          initialProps
         );
       }
     }
+    if (instance && (initialProps || this.readsField(node, instance)))
+      return this.nativeValue(instance.fields.evaluate(node), node);
     return fail(node, `不支持的原生表达式: ${node.getText()}`);
+  }
+  private readsField(expression: ts.Expression, instance: Instance): boolean {
+    let readsField = false;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        node.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        instance.fields.values.has(node.name.text)
+      )
+        readsField = true;
+      ts.forEachChild(node, visit);
+    };
+    visit(expression);
+    return readsField;
+  }
+  private stateAliasKey(
+    expression: ts.Expression,
+    instance: Instance
+  ): string | undefined {
+    const node = unwrap(expression);
+    if (
+      !instance.stateRoot ||
+      (!ts.isPropertyAccessExpression(node) &&
+        !ts.isElementAccessExpression(node)) ||
+      !this.readsField(node.expression, instance) ||
+      instance.fields.evaluate(node.expression) !== instance.stateRoot
+    )
+      return undefined;
+    const key = ts.isPropertyAccessExpression(node)
+      ? node.name.text
+      : instance.fields.evaluate(node.argumentExpression);
+    if (typeof key !== 'string' && typeof key !== 'number')
+      fail(node, 'state 根对象别名只支持静态属性读取');
+    const scoped = instance.state.get(String(key));
+    if (!scoped) fail(node, `state 根对象别名引用未声明的属性 ${key}`);
+    return scoped;
+  }
+  private rejectStateAliasRead(
+    expression: ts.Expression,
+    instance: Instance
+  ): void {
+    if (!instance.stateRoot) return;
+    const visit = (node: ts.Node): void => {
+      if (
+        (ts.isPropertyAccessExpression(node) ||
+          ts.isElementAccessExpression(node)) &&
+        this.readsField(node, instance) &&
+        (this.stateAliasKey(node, instance) ||
+          instance.fields.evaluate(node) === instance.stateRoot)
+      )
+        fail(node, 'state 根对象别名是动态值，不能用于原生静态表达式');
+      ts.forEachChild(node, visit);
+    };
+    visit(expression);
+  }
+  private fieldObject(
+    expression: ts.Expression,
+    instance: Instance,
+    label: string,
+    initialProps = false
+  ): Record<string, InstanceFieldValue> {
+    if (!initialProps && !this.readsField(expression, instance))
+      fail(expression, `${label} 必须是静态对象或实例字段对象`);
+    this.rejectStateAliasRead(expression, instance);
+    if (!initialProps) this.rejectDynamicPropsRead(expression, instance);
+    const value = instance.fields.evaluate(expression);
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+      fail(expression, `${label} 必须是静态对象或实例字段对象`);
+    return value;
+  }
+  private nativeValue(
+    value: InstanceFieldValue,
+    node: ts.Node
+  ): NativeStateValue {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isFinite(value))
+    )
+      return value;
+    return fail(node, '原生值只支持字符串、布尔值或有限数字');
   }
   private initialState(
     member: OwnedMember,
+    instance: Instance,
     active = new Set<ts.Node>()
   ): Map<string, NativeStateValue> {
     if (active.has(member.declaration))
       fail(member.declaration, 'initState 循环');
     active.add(member.declaration);
-    const value = object(returnValue(member), 'initState()');
+    const expression = returnValue(member);
+    const node = unwrap(expression);
     const values = new Map<string, NativeStateValue>();
+    if (!ts.isObjectLiteralExpression(node)) {
+      for (const [key, value] of Object.entries(
+        this.fieldObject(expression, instance, 'initState()', true)
+      ))
+        values.set(key, this.nativeValue(value, expression));
+      active.delete(member.declaration);
+      return values;
+    }
+    const value = node;
     for (const p of value.properties) {
       if (ts.isSpreadAssignment(p)) {
         const call = unwrap(p.expression);
         if (
-          !ts.isCallExpression(call) ||
-          !ts.isPropertyAccessExpression(call.expression) ||
-          call.expression.expression.kind !== ts.SyntaxKind.SuperKeyword ||
-          call.expression.name.text !== 'initState' ||
-          call.arguments.length
-        )
-          fail(p, 'state 展开只支持 super.initState()');
-        for (const [key, value] of this.initialState(
-          this.parent(member, 'initState'),
-          active
-        ))
-          values.set(key, value);
+          ts.isCallExpression(call) &&
+          ts.isPropertyAccessExpression(call.expression) &&
+          call.expression.expression.kind === ts.SyntaxKind.SuperKeyword &&
+          call.expression.name.text === 'initState' &&
+          !call.arguments.length
+        ) {
+          for (const [key, value] of this.initialState(
+            this.parent(member, 'initState'),
+            instance,
+            active
+          ))
+            values.set(key, value);
+        } else {
+          for (const [key, value] of Object.entries(
+            this.fieldObject(p.expression, instance, 'state 展开', true)
+          ))
+            values.set(key, this.nativeValue(value, p.expression));
+        }
       } else if (ts.isPropertyAssignment(p))
-        values.set(name(p.name), this.literal(p.initializer));
+        values.set(
+          name(p.name),
+          this.literal(p.initializer, instance, new Set(), true)
+        );
       else fail(p, 'state 必须使用静态属性');
     }
     active.delete(member.declaration);
@@ -431,26 +583,61 @@ class NativeComposer {
   }
   private instance(
     logical: ClassReference,
-    props: Map<string, Binding>
+    props: Map<string, PropBinding>
   ): NativeNode {
     const reference = this.index.select(logical);
     if (this.stack.includes(reference.id))
       fail(reference.declaration, `静态组件组合循环: ${reference.className}`);
     this.stack.push(reference.id);
     this.validateInstance(reference);
+    const initialProps: Record<string, InstanceFieldValue> = {};
+    for (const [key, binding] of props) {
+      if (binding.kind === 'literal') initialProps[key] = binding.value;
+      else {
+        const initial = this.state.find((entry) => entry.key === binding.key);
+        if (!initial)
+          fail(reference.declaration, `props.${key} 无法解析初始 state`);
+        initialProps[key] = initial.value;
+      }
+    }
     const instance: Instance = {
       reference,
       prefix: `c${this.nextInstance++}_`,
       state: new Map(),
       props,
+      fields: analyzeInstanceFields(
+        this.index.hierarchy(reference),
+        this.fieldOptions(initialProps)
+      ),
     };
     const init = this.member(reference, 'initState');
-    if (init)
-      for (const [key, value] of this.initialState(init)) {
+    if (init) {
+      for (const [key, value] of this.initialState(init, instance)) {
         const scoped = `${instance.prefix}s${instance.state.size}_${key.replace(/[^A-Za-z0-9_]/g, '_')}`;
         instance.state.set(key, scoped);
         this.state.push({ key: scoped, value });
       }
+      const expression = returnValue(init);
+      // Only the final returned root aliases state. A parent return copied by
+      // a child object spread keeps its original fields independent of state.
+      if (!ts.isObjectLiteralExpression(unwrap(expression))) {
+        const stateRoot = this.fieldObject(
+          expression,
+          instance,
+          'initState()',
+          true
+        );
+        if (instance.fields.sharedObjects.has(stateRoot))
+          fail(expression, '共享模块对象不能作为原生state根');
+        instance.stateRoot = stateRoot;
+        const includesRoot = (value: InstanceFieldValue): boolean =>
+          value === stateRoot ||
+          (!!value &&
+            typeof value === 'object' &&
+            Object.values(value).some(includesRoot));
+        instance.propsStateRoot = includesRoot(initialProps);
+      }
+    }
     const styles = this.member(reference, 'initStyles');
     if (styles) this.validateStyles(styles);
     const render = this.member(reference, 'render');
@@ -460,20 +647,12 @@ class NativeComposer {
     return root;
   }
   private validateInstance(reference: ClassReference): void {
-    // Constructors and field initializers execute for every ancestor, even if
-    // a child overrides the corresponding member. They cannot be discarded.
+    // Constructors execute for every ancestor, even if a child overrides the
+    // corresponding member. Field initialization is checked by the shared plan.
     for (const owner of this.index.hierarchy(reference))
       for (const member of owner.declaration.members) {
         if (ts.isConstructorDeclaration(member))
           fail(member, '原生组件不支持自定义 constructor');
-        if (
-          ts.isPropertyDeclaration(member) &&
-          member.initializer &&
-          !member.modifiers?.some(
-            (modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword
-          )
-        )
-          fail(member, '原生组件不支持实例字段初始化；请使用 initState');
       }
     // Match the framework component lifecycle, including props updates and
     // error boundaries. Effective members preserve override and owner semantics;
@@ -539,10 +718,14 @@ class NativeComposer {
       if (group === 'props') {
         const binding = instance.props.get(key);
         if (!binding) fail(node, `未提供的 props.${key}`);
-        return binding;
+        return binding.kind === 'state'
+          ? binding
+          : { kind: 'literal', value: this.nativeValue(binding.value, node) };
       }
     }
-    return { kind: 'literal', value: this.literal(node) };
+    const aliasKey = this.stateAliasKey(node, instance);
+    if (aliasKey) return { kind: 'state', key: aliasKey };
+    return { kind: 'literal', value: this.literal(node, instance) };
   }
   private text(
     expression: ts.Expression,
@@ -570,7 +753,10 @@ class NativeComposer {
         result.push(
           prop.kind === 'state'
             ? prop
-            : { kind: 'literal', value: String(prop.value) }
+            : {
+                kind: 'literal',
+                value: String(this.nativeValue(prop.value, expression)),
+              }
         );
       else fail(expression, `只支持已声明 state/props 的 {{key}} 绑定: ${key}`);
       cursor = matcher.lastIndex;
@@ -582,16 +768,80 @@ class NativeComposer {
   private props(
     node: ts.Expression | undefined,
     instance: Instance
-  ): Map<string, Binding> {
-    const result = new Map<string, Binding>();
+  ): Map<string, PropBinding> {
+    const result = new Map<string, PropBinding>();
     if (!node) return result;
     for (const p of object(node, '组件 props').properties) {
       if (!ts.isPropertyAssignment(p)) fail(p, '组件 props 只支持静态属性');
-      result.set(name(p.name), this.binding(p.initializer, instance));
+      if (name(p.name) === '__proto__') fail(p, '组件 props 不支持原型属性');
+      const value = unwrap(p.initializer);
+      const stateAlias = this.stateAliasKey(value, instance);
+      if (stateAlias) {
+        result.set(name(p.name), { kind: 'state', key: stateAlias });
+        continue;
+      }
+      if (
+        ts.isPropertyAccessExpression(value) &&
+        ts.isPropertyAccessExpression(value.expression) &&
+        value.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        ['state', 'props'].includes(value.expression.name.text)
+      ) {
+        if (value.expression.name.text === 'props')
+          result.set(
+            name(p.name),
+            instance.props.get(value.name.text) ?? {
+              kind: 'literal',
+              value: undefined,
+            }
+          );
+        else result.set(name(p.name), this.binding(value, instance));
+      } else {
+        this.rejectDynamicPropsRead(value, instance);
+        this.rejectStateAliasRead(value, instance);
+        result.set(name(p.name), {
+          kind: 'literal',
+          value: instance.fields.evaluate(value),
+        });
+      }
     }
     return result;
   }
-  private style(props: ts.Expression | undefined): NativeStyle | undefined {
+  private rejectDynamicPropsRead(
+    expression: ts.Expression,
+    instance: Instance
+  ): void {
+    const visit = (node: ts.Node): void => {
+      if (
+        (ts.isPropertyAccessExpression(node) ||
+          ts.isElementAccessExpression(node)) &&
+        node.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        (ts.isPropertyAccessExpression(node)
+          ? node.name.text === 'props'
+          : ts.isStringLiteralLike(node.argumentExpression) &&
+            node.argumentExpression.text === 'props') &&
+        [...instance.props.values()].some((binding) => binding.kind === 'state')
+      ) {
+        const access = node.parent;
+        const key =
+          ts.isPropertyAccessExpression(access) && access.expression === node
+            ? access.name.text
+            : ts.isElementAccessExpression(access) &&
+                access.expression === node &&
+                (ts.isStringLiteralLike(access.argumentExpression) ||
+                  ts.isNumericLiteral(access.argumentExpression))
+              ? access.argumentExpression.text
+              : undefined;
+        if (key === undefined || instance.props.get(key)?.kind === 'state')
+          fail(node, '动态 props 不能用于原生静态表达式或嵌套 props');
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(expression);
+  }
+  private style(
+    props: ts.Expression | undefined,
+    instance: Instance
+  ): NativeStyle | undefined {
     if (!props) return undefined;
     const p = object(props, 'VNode props');
     for (const field of p.properties)
@@ -600,11 +850,26 @@ class NativeComposer {
     const style = property(p, 'style');
     if (!style) return undefined;
     const out: Record<string, string | number> = {};
-    for (const item of object(style, 'style').properties) {
-      if (!ts.isPropertyAssignment(item) || !STYLES.has(name(item.name)))
-        fail(item, '不支持的原生样式属性');
-      const key = name(item.name),
-        value = this.literal(item.initializer);
+    const styleNode = unwrap(style);
+    const entries = ts.isObjectLiteralExpression(styleNode)
+      ? styleNode.properties.map((item) => {
+          if (!ts.isPropertyAssignment(item))
+            fail(item, '不支持的原生样式属性');
+          return {
+            key: name(item.name),
+            value: this.literal(item.initializer, instance),
+            node: item as ts.Node,
+          };
+        })
+      : Object.entries(this.fieldObject(style, instance, 'style')).map(
+          ([key, value]) => ({
+            key,
+            value: this.nativeValue(value, style),
+            node: style as ts.Node,
+          })
+        );
+    for (const { key, value, node } of entries) {
+      if (!STYLES.has(key)) fail(node, '不支持的原生样式属性');
       if (
         ['color', 'backgroundColor', 'fontWeight', 'textAlign'].includes(key) &&
         (typeof value === 'string' || typeof value === 'number')
@@ -613,7 +878,7 @@ class NativeComposer {
       else if (typeof value === 'number') out[key] = value;
       else if (typeof value === 'string' && /^\d+(\.\d+)?px$/.test(value))
         out[key] = parseFloat(value);
-      else fail(item, `样式 ${key} 只支持数字或 px`);
+      else fail(node, `样式 ${key} 只支持数字或 px`);
     }
     return out as NativeStyle;
   }
@@ -674,9 +939,9 @@ class NativeComposer {
       return this.node(returnValue(parent), instance, parent);
     } else return fail(node, '只支持静态 h/createComponent/VNode 表达式');
     if (!tag) fail(node, 'VNode 缺少 tag');
-    const tagName = this.literal(tag);
+    const tagName = this.literal(tag, instance);
     if (typeof tagName !== 'string') fail(tag, 'VNode tag 必须是字符串');
-    const style = this.style(props);
+    const style = this.style(props, instance);
     let values: readonly ts.Expression[] = [];
     if (children) {
       const array = unwrap(children);
@@ -800,7 +1065,12 @@ class NativeComposer {
       ) {
         const key = instance.state.get(expression.left.name.text);
         if (!key) fail(expression.left, '动作引用未声明 state');
-        const value = this.literal(expression.right);
+        if (instance.propsStateRoot)
+          fail(
+            expression.left,
+            'props 对象与 state 根共享时不支持原生状态写入；请在 initState 中展开复制'
+          );
+        const value = this.literal(expression.right, instance);
         const operator = expression.operatorToken.kind;
         const initial = this.state.find((s) => s.key === key)!.value;
         if (

@@ -65,7 +65,22 @@ export function findRootClass(
     if (!rootExpr) {
       continue;
     }
-    return resolveClassReference(context, { filePath, source }, rootExpr);
+    const component = resolveClassReference(
+      context,
+      { filePath, source },
+      rootExpr
+    );
+    const options =
+      expression.arguments[0] && unwrapParentheses(ts, expression.arguments[0]);
+    const rootProps =
+      options && ts.isObjectLiteralExpression(options)
+        ? options.properties.find(
+            (p): p is tsTypes.PropertyAssignment =>
+              ts.isPropertyAssignment(p) &&
+              p.name.getText(source) === 'rootProps'
+          )?.initializer
+        : undefined;
+    return { ...component, rootProps };
   }
 
   // 2. 导出的 Component 子类

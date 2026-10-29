@@ -44,7 +44,7 @@ export function flushSync(): void {
 export class ReactiveSystem {
   private static instance: ReactiveSystem;
   private activeEffect: ReactiveEffect | null = null;
-  private readonly effectStack: ReactiveEffect[] = [];
+  private readonly effectStack: Array<ReactiveEffect | null> = [];
   private targetMap = new WeakMap<
     object,
     Map<string | symbol, Set<ReactiveEffect>>
@@ -399,8 +399,9 @@ export class ReactiveSystem {
    * 在指定 effect 的上下文中运行 fn，使 fn 内的响应式访问被收集到该 effect，
    * 而不是当前外层 effect。组件渲染用它隔离依赖：子组件在父组件渲染期间
    * 执行自身 render 时，子 state 的访问不会污染父组件的 effect。
+   * 传入 null 可暂停当前依赖收集，嵌套 effect 仍正常收集并恢复上下文。
    */
-  public runWithEffect<T>(effect: ReactiveEffect, fn: () => T): T {
+  public runWithEffect<T>(effect: ReactiveEffect | null, fn: () => T): T {
     this.effectStack.push(effect);
     this.activeEffect = effect;
     try {

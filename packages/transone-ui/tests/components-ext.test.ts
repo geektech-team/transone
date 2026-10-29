@@ -15,9 +15,9 @@ import { TuPopup } from '../lib/components/Popup';
 
 /** 扩展组件（反馈 / 表单 / 展示 / 导航四类）在 Web 运行时的行为测试。 */
 
-type AnyComponent = Component<Record<string, unknown>, Record<string, unknown>>;
+type MountableComponent = Pick<Component, 'mount' | 'unmount'>;
 
-function mount(component: AnyComponent): {
+function mount(component: MountableComponent): {
   container: HTMLElement;
   dispose: () => void;
 } {
@@ -185,8 +185,8 @@ describe('TuActionSheet', () => {
     const sheet = new TuActionSheet({ visible: true, actions });
     const { container, dispose } = mount(sheet);
     disposers.push(dispose);
-    const selected: number[] = [];
-    sheet.on('select', (index: number) => {
+    const selected: unknown[] = [];
+    sheet.on('select', (index) => {
       selected.push(index);
     });
 
@@ -216,8 +216,8 @@ describe('TuCheckbox', () => {
     const checkbox = new TuCheckbox({ checked: false, label: '同意协议' });
     const { container, dispose } = mount(checkbox);
     disposers.push(dispose);
-    const values: boolean[] = [];
-    checkbox.on('change', (v: boolean) => {
+    const values: unknown[] = [];
+    checkbox.on('change', (v) => {
       values.push(v);
     });
 
@@ -248,8 +248,8 @@ describe('TuRadio', () => {
     const radio = new TuRadio({ checked: false, label: '男' });
     const { container, dispose } = mount(radio);
     disposers.push(dispose);
-    const values: boolean[] = [];
-    radio.on('change', (v: boolean) => {
+    const values: unknown[] = [];
+    radio.on('change', (v) => {
       values.push(v);
     });
     const root = container.firstElementChild as HTMLElement;
@@ -268,8 +268,8 @@ describe('TuSearchBar', () => {
     const search = new TuSearchBar({ value: '' });
     const { container, dispose } = mount(search);
     disposers.push(dispose);
-    const values: string[] = [];
-    search.on('input', (v: string) => {
+    const values: unknown[] = [];
+    search.on('input', (v) => {
       values.push(v);
     });
     const input = container.querySelector('input') as HTMLInputElement;
@@ -297,9 +297,9 @@ describe('TuSearchBar', () => {
     const search = new TuSearchBar({ value: 'hello', clearable: true, showCancel: true });
     const { container, dispose } = mount(search);
     disposers.push(dispose);
-    const values: string[] = [];
+    const values: unknown[] = [];
     let cancels = 0;
-    search.on('input', (v: string) => {
+    search.on('input', (v) => {
       values.push(v);
     });
     search.on('cancel', () => {
@@ -403,8 +403,8 @@ describe('TuTabs', () => {
     const tabs = new TuTabs({ items, active: 0 });
     const { container, dispose } = mount(tabs);
     disposers.push(dispose);
-    const changed: number[] = [];
-    tabs.on('change', (index: number) => {
+    const changed: unknown[] = [];
+    tabs.on('change', (index) => {
       changed.push(index);
     });
 

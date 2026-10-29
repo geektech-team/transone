@@ -604,7 +604,7 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
         h('div', { className: 'demo-row' }, [
           createComponent({
             component: TuCell,
-            props: { title: '单元格', value: this.state.count, isLink: true },
+            props: { title: '单元格', value: `${this.state.count}`, isLink: true },
             emitters: { click: () => this.handleCellClick() },
           }),
           createComponent({

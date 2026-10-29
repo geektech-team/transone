@@ -1,11 +1,15 @@
 import type * as tsTypes from 'typescript';
-import { toBinding, BindingScope } from './binding';
+import type { InstanceFieldPlan } from '../components/instance-fields';
+import { fieldValueNode } from '../components/instance-fields';
 import {
-  foldExpression,
-  FoldedValue,
-  isThisExpression,
-  unwrapParentheses,
-} from './fold';
+  assertStaticField,
+  fieldRoot,
+  instanceFieldPath,
+  requiresInitialProps,
+  type FieldStateAlias,
+} from './fields';
+import { toBinding, BindingScope } from './binding';
+import { foldExpression, isThisExpression, unwrapParentheses } from './fold';
 import { mpError } from './errors';
 import { ClassSource, CompileContext, warn } from './types';
 import { moduleConstants, ownedMethod, stableTag } from './inheritance';
@@ -28,6 +32,7 @@ export interface TemplateBuilder {
   usedComponents: Map<string, ClassSource>;
   /** 本模板中引用到的 props 名（组件需要声明 properties）。 */
   propsReferenced: Set<string>;
+  initializationFields: Set<string>;
   /** 本模板的组件通过 triggerEvent 触发的事件名。 */
   customEvents: Set<string>;
   /** 父级需要生成的 emitters 包装方法。 */
@@ -261,9 +266,12 @@ export function compileTemplate(
   context: CompileContext,
   classSource: ClassSource,
   _kind: 'page' | 'component',
-  hoverSelectors: Set<string> = new Set()
+  hoverSelectors: Set<string> = new Set(),
+  fields?: InstanceFieldPlan,
+  stateAliases?: FieldStateAlias[]
 ): CompiledTemplate {
   const { ts } = context;
+  const instanceSource = classSource;
   const owned = ownedMethod(context, classSource, 'render');
   const renderMethod = owned?.declaration;
   if (owned) classSource = owned.owner;
@@ -314,12 +322,26 @@ export function compileTemplate(
     handlers: new Set(),
     usedComponents: new Map(),
     propsReferenced: new Set(),
+    initializationFields: new Set(),
     customEvents: new Set(),
     emitters: [],
   };
   const env: TemplateEnv = {
     builder,
-    scope: { params: new Set(), locals, consts },
+    scope: {
+      params: new Set(),
+      locals,
+      consts,
+      fields,
+      stateAliases,
+      propsInitialization: !!fields?.usesProps || !!instanceSource.rootProps,
+      propsPacket: '__transone_props',
+      propsFallback: '',
+      onFieldRead: (key) => {
+        if (fields?.deferred.has(key)) builder.initializationFields.add(key);
+        assertStaticField(context, instanceSource, key, fields);
+      },
+    },
     indent: 0,
     extraAttrs: [],
     origins: collectFactoryOrigins(ts, classSource.source),
@@ -516,6 +538,10 @@ function compileElementCall(
     }
   }
 
+  if (!ts.isStringLiteral(tagExpr)) {
+    const tag = staticFieldValue(tagExpr, env);
+    if (typeof tag === 'string') tagExpr = ts.factory.createStringLiteral(tag);
+  }
   if (!ts.isStringLiteral(tagExpr)) {
     throw mpError(classSource.filePath, '元素标签必须是字符串字面量');
   }
@@ -984,6 +1010,8 @@ function compileComponent(
   env.builder.usedComponents.set(tag, target);
 
   const attrs: string[] = [...env.extraAttrs];
+  const rawProps: string[] = [];
+  const propsInitialization = requiresInitialProps(context, target);
   const callSiteProps: Record<string, string> = {};
 
   if (propsExpr !== undefined) {
@@ -1009,6 +1037,20 @@ function compileComponent(
         );
       }
       callSiteProps[key] = inferPropType(context, classSource, value, env);
+      if (key.startsWith('__transone_') || key === '__proto__')
+        throw mpError(
+          classSource.filePath,
+          '组件 props 名称使用了框架保留前缀'
+        );
+      if (propsInitialization) {
+        const binding = toBinding(
+          bindingContext(context, classSource, env),
+          value
+        );
+        rawProps.push(`${key}: ${binding}`);
+        attrs.push(`${key}="{{${escapeAttr(binding)}}}"`);
+        continue;
+      }
       const folded = foldExpression(ts, value, env.scope.consts);
       if (folded !== undefined && folded !== null) {
         attrs.push(`${key}="${escapeAttr(literalToString(folded))}"`);
@@ -1024,6 +1066,10 @@ function compileComponent(
     existing.push(callSiteProps);
     context.callSites.set(tag, existing);
   }
+  if (propsInitialization)
+    attrs.push(
+      `__transone_props="{{ ${escapeAttr(`{${rawProps.join(', ')}}`)} }}"`
+    );
 
   if (emittersExpr !== undefined) {
     if (!ts.isObjectLiteralExpression(emittersExpr)) {
@@ -1280,6 +1326,22 @@ function unwrapTypeAssertions(
   }
 }
 
+function staticFieldValue(value: tsTypes.Expression, env: TemplateEnv) {
+  const key = fieldRoot(value),
+    path = instanceFieldPath(value);
+  if (!key || !env.scope.fields?.values.has(key)) return undefined;
+  if (env.scope.fields.deferred.has(key)) return undefined;
+  if (
+    path &&
+    env.scope.stateAliases?.some((alias) =>
+      alias.field.every((key, index) => path[index] === key)
+    )
+  )
+    return undefined;
+  env.scope.onFieldRead?.(key);
+  return env.scope.fields.evaluate(value);
+}
+
 function compileClassAttr(
   context: CompileContext,
   classSource: ClassSource,
@@ -1287,7 +1349,9 @@ function compileClassAttr(
   env: TemplateEnv
 ): string {
   const { ts } = context;
-  const folded = foldExpression(ts, value, env.scope.consts);
+  const field = staticFieldValue(value, env);
+  const folded =
+    field === undefined ? foldExpression(ts, value, env.scope.consts) : field;
   if (typeof folded === 'string') {
     // 静态 class 命中 hover 样式时挂 hover-class（WXSS 无 :hover 伪类）
     const hoverClass = hoverClassName(folded, env.hoverSelectors);
@@ -1333,13 +1397,22 @@ function compileStyleAttr(
   env: TemplateEnv
 ): string {
   const { ts } = context;
-  const options = unwrapParentheses(ts, value);
+  let options = unwrapParentheses(ts, value);
+  if (!ts.isObjectLiteralExpression(options)) {
+    const field = staticFieldValue(value, env);
+    if (field && typeof field === 'object' && !Array.isArray(field))
+      options = fieldValueNode(field);
+  }
   if (!ts.isObjectLiteralExpression(options)) {
     throw mpError(classSource.filePath, 'style 属性必须是对象字面量');
   }
   const declarations: string[] = [];
   for (const property of options.properties) {
-    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) {
+    if (
+      !ts.isPropertyAssignment(property) ||
+      (!ts.isIdentifier(property.name) &&
+        !ts.isStringLiteralLike(property.name))
+    ) {
       throw mpError(classSource.filePath, 'style 属性只支持静态键');
     }
     const cssKey = property.name.text.replace(/([A-Z])/g, '-$1').toLowerCase();
@@ -1399,7 +1472,9 @@ function compileGenericAttr(
 ): string {
   const { ts } = context;
   const attrName = wxmlAttrName(key);
-  const folded = foldExpression(ts, value, env.scope.consts);
+  const field = staticFieldValue(value, env);
+  const folded =
+    field === undefined ? foldExpression(ts, value, env.scope.consts) : field;
   if (folded !== undefined) {
     if (folded === false || folded === null) {
       return '';
@@ -1650,7 +1725,9 @@ function inferPropType(
   env: TemplateEnv
 ): string {
   const { ts } = context;
-  const folded = foldExpression(ts, value, env.scope.consts);
+  const field = staticFieldValue(value, env);
+  const folded =
+    field === undefined ? foldExpression(ts, value, env.scope.consts) : field;
   if (typeof folded === 'string') {
     return 'String';
   }
@@ -1680,7 +1757,7 @@ function rawTemplateText(
   return undefined;
 }
 
-function literalToString(value: FoldedValue): string {
+function literalToString(value: unknown): string {
   return typeof value === 'string' ? value : String(value);
 }
 

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createWebStylesPlugin } from '../src/web-styles';
+import { createDomWindow } from '../../transone/lib/dom';
 
 const roots: string[] = [];
 const framework = resolve(import.meta.dir, '../../transone/lib/index.ts');
@@ -24,6 +25,10 @@ function project(files: Record<string, string>): string {
       paths: { transone: [framework] },
     },
   });
+  // Runtime style assertions exercise the real mount lifecycle. Construction
+  // deliberately leaves initStyles deferred until derived fields are ready.
+  files['main.ts'] +=
+    '\nfunction mounted(instance) { instance.mountToNode(); return instance; }';
   for (const [path, source] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), source);
@@ -58,13 +63,7 @@ async function bundle(
 }
 
 function run(javascript: string): { value: unknown; styles: string[] } {
-  const elements: { textContent: string }[] = [];
-  const document = {
-    createElement: () => ({ textContent: '' }),
-    head: {
-      appendChild: (element: { textContent: string }) => elements.push(element),
-    },
-  };
+  const document = createDomWindow().document;
   const module = { exports: {} as { exercise: () => unknown } };
   new Function('module', 'exports', 'document', javascript)(
     module,
@@ -73,7 +72,9 @@ function run(javascript: string): { value: unknown; styles: string[] } {
   );
   return {
     value: module.exports.exercise(),
-    styles: elements.map((element) => element.textContent),
+    styles: Array.from(document.head.querySelectorAll('style')).map(
+      (element) => element.textContent ?? ''
+    ),
   };
 }
 
@@ -97,7 +98,7 @@ describe('Web component static styles', () => {
   ]) {
     it(`extracts public BaseComponent roots through ${declaration}`, async () => {
       const root = project({
-        'main.ts': `${declaration} class Fixed extends Base {initState(){return {}}initStyles(){this.styleManager.addStyle('fixed',{selector:'.base-component',properties:{color:'purple'}})}render(){return {tag:'div'}}} export function exercise(){return new Fixed().styleManager.styles.size}`,
+        'main.ts': `${declaration} class Fixed extends Base {initState(){return {}}initStyles(){this.styleManager.addStyle('fixed',{selector:'.base-component',properties:{color:'purple'}})}render(){return {tag:'div'}}} export function exercise(){return mounted(new Fixed()).styleManager.styles.size}`,
       });
       const built = await bundle(root);
       expect(built.css).toContain('.base-component');
@@ -114,7 +115,7 @@ describe('Web component static styles', () => {
         selector: '.fixed', properties: { color: 'red' }
       });`
       )}
-      export function exercise() { return new Fixed().styleManager.styles.size; }
+      export function exercise() { return mounted(new Fixed()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -133,7 +134,7 @@ describe('Web component static styles', () => {
         this.styleManager.addStyle('dynamic', { selector: '.dynamic', properties: { color: this.props.color } });
       `
       )}
-      export function exercise() { return new Dynamic({ color: 'purple' }).styleManager.styles.size; }
+      export function exercise() { return mounted(new Dynamic({ color: 'purple' })).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -162,7 +163,7 @@ describe('Web component static styles', () => {
         });
       `
       )}
-      export function exercise() { return new Fixed().styleManager.styles.size; }
+      export function exercise() { return mounted(new Fixed()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -201,7 +202,7 @@ describe('Web component static styles', () => {
         });`,
           `later() { ${operation} }`
         )}
-        export function exercise() { return new Fixed().styleManager.styles.size; }
+        export function exercise() { return mounted(new Fixed()).styleManager.styles.size; }
       `,
       });
       const built = await bundle(root);
@@ -222,7 +223,7 @@ describe('Web component static styles', () => {
         }
         render() { return { tag: 'div' }; }
       }
-      export function exercise() { return new Shadowed().styleManager.styles.size; }
+      export function exercise() { return mounted(new Shadowed()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -248,7 +249,7 @@ describe('Web component static styles', () => {
         selector: '.' + CLASS, properties: PROPERTIES
       });`
       )}
-      export function exercise() { return new Mutable().styleManager.styles.size; }
+      export function exercise() { return mounted(new Mutable()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -274,7 +275,7 @@ describe('Web component static styles', () => {
         selector: '.absolute', properties: { backgroundImage: 'url(https://example.com/image.png)' }
       });`
       )}
-      export function exercise() { return new Relative().styleManager.styles.size; }
+      export function exercise() { return mounted(new Relative()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -294,7 +295,7 @@ describe('Web component static styles', () => {
       const root = project({
         'main.ts': `import { Component } from 'transone';
           ${component('A', `this.styleManager.addStyle('a', { selector: '.resource', properties: { backgroundImage: ${JSON.stringify(resource)} } });`)}
-          export function exercise() { return new A().styleManager.styles.size; }
+          export function exercise() { return mounted(new A()).styleManager.styles.size; }
         `,
       });
       const built = await bundle(root);
@@ -309,7 +310,7 @@ describe('Web component static styles', () => {
   it('emits conditional and dynamically imported component CSS without instantiation', async () => {
     const root = project({
       'main.ts': `import { Conditional } from './conditional';
-        export const conditional = false ? new Conditional() : null;
+        export const conditional = false ? mounted(new Conditional()) : null;
         export const lazy = () => import('./lazy');`,
       'conditional.tsx': `import { Component } from 'transone';
         ${component(
@@ -335,7 +336,7 @@ describe('Web component static styles', () => {
   it('extracts installed, bundled UI JavaScript including immutable var selectors', async () => {
     const root = project({
       'main.ts': `import { TuButton } from 'installed-ui'; export const button = TuButton;
-        export function exercise() { return new TuButton().styleManager.styles.size; }`,
+        export function exercise() { return mounted(new TuButton()).styleManager.styles.size; }`,
       'node_modules/installed-ui/package.json': JSON.stringify({
         name: 'installed-ui',
         type: 'module',
@@ -364,7 +365,7 @@ describe('Web component static styles', () => {
     it(`marks overlapping selectors for runtime fallback with ${color} values`, async () => {
       const root = project({
         'main.ts': `import { A } from './a'; import { B } from './b';
-          export function exercise() { new B({ color: 'blue' }); new A(); return true; }`,
+          export function exercise() { mounted(new B({ color: 'blue' })); mounted(new A()); return true; }`,
         'a.ts': `import { Component } from 'transone'; ${component(
           'A',
           `
@@ -396,7 +397,7 @@ describe('Web component static styles', () => {
   it('marks collisions with generated hover selectors for runtime fallback', async () => {
     const root = project({
       'main.ts': `import { A } from './a'; import { B } from './b';
-        export function exercise() { new B({ color: 'black' }); new A(); return true; }`,
+        export function exercise() { mounted(new B({ color: 'black' })); mounted(new A()); return true; }`,
       'a.ts': `import { Component } from 'transone'; ${component(
         'A',
         `
@@ -430,7 +431,7 @@ describe('Web component static styles', () => {
       'main.ts': `import { Component } from 'transone';
         ${component('A', `this.styleManager.addStyle('a', { selector: '.first:hover', properties: { color: 'red' } });`)}
         ${component('B', `this.styleManager.addStyle('b', { selector: '.first, .second', properties: { color: this.props.color }, hover: { color: 'blue' } });`)}
-        export function exercise() { return [new A(), new B({ color: 'black' })].map(c => c.styleManager.styles.size); }
+        export function exercise() { return [mounted(new A()), mounted(new B({ color: 'black' }))].map(c => c.styleManager.styles.size); }
       `,
     });
     const built = await bundle(root);
@@ -442,7 +443,7 @@ describe('Web component static styles', () => {
   it('marks intersecting selector lists for runtime fallback', async () => {
     const root = project({
       'main.ts': `import { A } from './a'; import { B } from './b';
-        export function exercise() { new B({ color: 'blue' }); new A(); return true; }`,
+        export function exercise() { mounted(new B({ color: 'blue' })); mounted(new A()); return true; }`,
       'a.ts': `import { Component } from 'transone'; ${component(
         'A',
         `
@@ -481,7 +482,7 @@ describe('Web component static styles', () => {
         'main.ts': `import { Component } from 'transone';
           ${component('A', `this.styleManager.addStyle('a', { selector: ${JSON.stringify(firstSelector)}, properties: { color: 'red' } });`)}
           ${component('B', `this.styleManager.addStyle('b', { selector: ${JSON.stringify(secondSelector)}, properties: { color: 'blue' } });`)}
-          export function exercise() { return [new A(), new B()].map(c => c.styleManager.styles.size); }
+          export function exercise() { return [mounted(new A()), mounted(new B())].map(c => c.styleManager.styles.size); }
         `,
       });
       const built = await bundle(root);
@@ -500,7 +501,7 @@ describe('Web component static styles', () => {
       'main.ts': `import { Component } from 'transone';
         ${component('A', `this.styleManager.addStyle('a', { selector: ':is(.first, .shared', properties: { color: 'red' } });`)}
         ${component('B', `this.styleManager.addStyle('b', { selector: '.shared', properties: { color: 'blue' } });`)}
-        export function exercise() { return [new A(), new B()].map(c => c.styleManager.styles.size); }
+        export function exercise() { return [mounted(new A()), mounted(new B())].map(c => c.styleManager.styles.size); }
       `,
     });
     const first = await bundle(root);
@@ -516,7 +517,7 @@ describe('Web component static styles', () => {
       'main.ts': `import { Component } from 'transone';
       ${component('A', `this.styleManager.addStyle('a', { selector: '.fixed', properties: { color: 'red' } });`)}
       ${component('B', `this.styleManager.addStyle('b', { selector: this.props.selector, properties: { color: 'blue' } });`)}
-      export function exercise() { new B({ selector: '.fixed' }); new A(); return true; }
+      export function exercise() { mounted(new B({ selector: '.fixed' })); mounted(new A()); return true; }
     `,
     });
     const first = await bundle(root);
@@ -546,7 +547,7 @@ describe('Web component static styles', () => {
         `this.styleManager.addStyle('escaping', { selector: '.escaping', properties: { color: 'red' } });`,
         `later() { const self = this; self.styleManager.clearStyles(); }`
       )}
-      export function exercise() { return [new Inherited(), new Computed(), new Escaping()].map(c => c.styleManager.styles.size); }
+      export function exercise() { return [mounted(new Inherited()), mounted(new Computed()), mounted(new Escaping())].map(c => c.styleManager.styles.size); }
     `,
     });
     const built = await bundle(root);
@@ -570,7 +571,7 @@ describe('Web component static styles', () => {
     it(`keeps cross-module inherited manager behavior through ${ancestor}`, async () => {
       const root = project({
         'main.ts': `import { Child } from './child'; export function exercise() {
-          const child = new Child(); const before = child.inspect(); child.clear();
+          const child = mounted(new Child()); const before = child.inspect(); child.clear();
           return { before, after: child.inspect() };
         }`,
         'base.ts': `import { Component } from 'transone'; ${component(
@@ -610,7 +611,7 @@ describe('Web component static styles', () => {
     it(`keeps inherited manager behavior for a nested ${childDeclaration.startsWith('return') ? 'class expression' : 'class declaration'}`, async () => {
       const root = project({
         'main.ts': `import { makeChild } from './child'; export function exercise() {
-          const Child = makeChild(); const child = new Child();
+          const Child = makeChild(); const child = mounted(new Child());
           const before = child.inspect(); child.clear();
           return { before, after: child.inspect() };
         }`,
@@ -642,7 +643,7 @@ describe('Web component static styles', () => {
         clear() { this.styleManager.clearStyles(); }
       }; }
       export function exercise() {
-        const Child = makeChild(); const child = new Child();
+        const Child = makeChild(); const child = mounted(new Child());
         const before = child.inspect(); child.clear(); return { before, after: child.inspect() };
       }`,
     });
@@ -657,7 +658,7 @@ describe('Web component static styles', () => {
   // Exporting a fixed base or inheriting it safely alone must not disable extraction.
   it('continues extracting exported styles for a safe imported descendant', async () => {
     const root = project({
-      'main.ts': `import { Child } from './child'; export function exercise() { return new Child().styleManager.styles.size; }`,
+      'main.ts': `import { Child } from './child'; export function exercise() { return mounted(new Child()).styleManager.styles.size; }`,
       'base.ts': `import { Component } from 'transone'; ${component(
         'Base',
         `
@@ -678,7 +679,7 @@ describe('Web component static styles', () => {
       'main.ts': `import { Component } from 'transone'; const Parent = Component;
         ${component('Fixed', `this.styleManager.addStyle('fixed', { selector: '.fixed', properties: { color: 'red' } });`)}
         ${component('Dynamic', `this.styleManager.addStyle('dynamic', { selector: '.dynamic', properties: { color: this.props.color } });`, `inspect() { return this.styleManager.styles.size; }`).replace('extends Component', 'extends Parent')}
-        export function exercise() { new Fixed(); return new Dynamic({ color: 'blue' }).inspect(); }
+        export function exercise() { mounted(new Fixed()); return mounted(new Dynamic({ color: 'blue' })).inspect(); }
       `,
     });
     const built = await bundle(root);
@@ -698,7 +699,7 @@ describe('Web component static styles', () => {
         `const SELECTOR = this.props.selector;
         this.styleManager.addStyle('b', { selector: SELECTOR, properties: { color: 'blue' } });`
       )}
-      export function exercise() { new B({ selector: '.fixed' }); new A(); return true; }
+      export function exercise() { mounted(new B({ selector: '.fixed' })); mounted(new A()); return true; }
     `,
     });
     const first = await bundle(root);
@@ -714,7 +715,7 @@ describe('Web component static styles', () => {
       const COLOR = 'red'; const PROPERTIES = { color: COLOR, padding: '12rpx' };
       const OPTIONS = { selector: '.options', properties: PROPERTIES } as const;
       ${component('A', `this.styleManager.addStyle('a', OPTIONS);`)}
-      export function exercise() { return new A().styleManager.styles.size; }
+      export function exercise() { return mounted(new A()).styleManager.styles.size; }
     `,
     });
     const built = await bundle(root);
@@ -727,7 +728,7 @@ describe('Web component static styles', () => {
   it('handles mjs namespace imports and cjs Component require aliases', async () => {
     const root = project({
       'main.ts': `import { Mjs } from './component.mjs'; import { Cjs } from './component.cjs';
-        export function exercise() { return [new Mjs(), new Cjs()].map(c => c.styleManager.styles.size); }`,
+        export function exercise() { return [mounted(new Mjs()), mounted(new Cjs())].map(c => c.styleManager.styles.size); }`,
       'component.mjs': `import * as TransOne from 'transone';
         ${component('Mjs', `this.styleManager.addStyle('mjs', { selector: '.mjs', properties: { color: 'red' } });`).replace('extends Component', 'extends TransOne.Component')}`,
       'component.cjs': `const { Component: Base } = require('transone');
@@ -758,32 +759,74 @@ describe('Web component static styles', () => {
     expect(run(built.javascript).value).toBe(1);
   });
 
-  // A real bundled manager does not make constructor-side clearing safe to hoist.
-  it('does not hoist styles past a bundled base constructor manager operation', async () => {
+  // A real bundled manager does not make clearing during initialization safe to hoist.
+  it('does not trust a shadowed Object.defineProperty in a bundled constructor', async () => {
     const root = project({
       'main.ts': `import { Foreign } from './foreign.js';
         export function exercise() { return new Foreign().styleManager.styles.size; }`,
-      'foreign-source.ts': `import { StyleManager } from ${JSON.stringify(resolve(import.meta.dir, '../../transone/lib/style/StyleManager.ts'))};
+      'manager-source.ts': `export { StyleManager } from ${JSON.stringify(resolve(import.meta.dir, '../../transone/lib/style/StyleManager.ts'))};`,
+    });
+    const compiled = await Bun.build({
+      entrypoints: [join(root, 'manager-source.ts')],
+      target: 'browser',
+      minify: false,
+    });
+    expect(compiled.success).toBe(true);
+    // Append the consumer without bundling it first: bundling renames a local
+    // Object binding, hiding the exact spelling the extractor must distrust.
+    writeFileSync(
+      join(root, 'foreign.js'),
+      (await compiled.outputs[0]!.text()) +
+        `
         class ForeignBase {
-          constructor() {
+          constructor(Object = { defineProperty(instance) { instance.styleManager.clearStyles(); } }) {
             this.styleManager = new StyleManager(); this.initState(); this.initStyles();
-            this.styleManager.clearStyles();
+            Object.defineProperty(this, 'state', {});
           }
           mount() {} mountToNode() {} update() {} unmount() {}
         }
-        ${component('Foreign', `this.styleManager.addStyle('foreign', { selector: '.foreign', properties: { color: 'red' } });`).replace('extends Component', 'extends ForeignBase')}`,
-    });
-    const compiled = await Bun.build({
-      entrypoints: [join(root, 'foreign-source.ts')],
-      target: 'browser',
-      minify: true,
-    });
-    expect(compiled.success).toBe(true);
-    writeFileSync(join(root, 'foreign.js'), await compiled.outputs[0]!.text());
+        ${component('Foreign', `this.styleManager.addStyle('foreign', { selector: '.foreign', properties: { color: 'red' } });`).replace('extends Component', 'extends ForeignBase')}`
+    );
     const built = await bundle(root);
     expect(built.css).toBe('');
     expect(run(built.javascript)).toEqual({ value: 0, styles: [''] });
   });
+
+  for (const phase of ['constructor', 'mountToNode']) {
+    it(`does not hoist styles past a bundled base ${phase} manager operation`, async () => {
+      const root = project({
+        'main.ts': `import { Foreign } from './foreign.js';
+        export function exercise() {
+          const instance = new Foreign(); instance.mountToNode();
+          return instance.styleManager.styles.size;
+        }`,
+        'foreign-source.ts': `import { StyleManager } from ${JSON.stringify(resolve(import.meta.dir, '../../transone/lib/style/StyleManager.ts'))};
+        class ForeignBase {
+          constructor() {
+            this.styleManager = new StyleManager(); this.initState();
+            ${phase === 'constructor' ? 'this.initStyles(); this.styleManager.clearStyles();' : ''}
+          }
+          mount() {} mountToNode() {
+            ${phase === 'mountToNode' ? 'this.initStyles(); this.styleManager.clearStyles();' : ''}
+          } update() {} unmount() {}
+        }
+        ${component('Foreign', `this.styleManager.addStyle('foreign', { selector: '.foreign', properties: { color: 'red' } });`).replace('extends Component', 'extends ForeignBase')}`,
+      });
+      const compiled = await Bun.build({
+        entrypoints: [join(root, 'foreign-source.ts')],
+        target: 'browser',
+        minify: true,
+      });
+      expect(compiled.success).toBe(true);
+      writeFileSync(
+        join(root, 'foreign.js'),
+        await compiled.outputs[0]!.text()
+      );
+      const built = await bundle(root);
+      expect(built.css).toBe('');
+      expect(run(built.javascript)).toEqual({ value: 0, styles: [''] });
+    });
+  }
 
   // Destructuring and loop assignments also invalidate a compiled var initializer.
   for (const assignment of [
@@ -795,7 +838,7 @@ describe('Web component static styles', () => {
       const root = project({
         'main.ts': `import { Component } from 'transone'; var CLASS = 'before'; ${assignment}
           ${component('A', `this.styleManager.addStyle('a', { selector: '.' + CLASS, properties: { color: 'red' } });`)}
-          export function exercise() { return new A().styleManager.styles.size; }
+          export function exercise() { return mounted(new A()).styleManager.styles.size; }
         `,
       });
       const built = await bundle(root);

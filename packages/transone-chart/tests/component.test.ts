@@ -74,21 +74,34 @@ describe('TcChart 小程序生命周期', () => {
   test('组件宿主填满父容器，为 Canvas 提供可解析尺寸', () => {
     const chart = new TcChart({
       option: { type: 'radar', indicators: [], series: [] },
+      resolve: () => ({
+        ctx: new MockCanvas(),
+        width: 400,
+        height: 300,
+        dpr: 1,
+      }),
     });
-    const styles = (
-      chart as unknown as {
-        styleManager: { styles: Map<string, unknown> };
-      }
-    ).styleManager.styles;
+    const container = document.createElement('div');
+    chart.mount(container);
+    try {
+      const styles = (
+        chart as unknown as {
+          styleManager: { styles: Map<string, unknown> };
+        }
+      ).styleManager.styles;
 
-    expect(styles.get('tc-chart-host')).toEqual({
-      selector: ':host',
-      properties: {
-        display: 'block',
-        height: '100%',
-        width: '100%',
-      },
-    });
+      expect(styles.get('tc-chart-host')).toEqual({
+        selector: ':host',
+        properties: {
+          display: 'block',
+          height: '100%',
+          width: '100%',
+        },
+      });
+      expect(container.querySelector('canvas')).toBeTruthy();
+    } finally {
+      chart.unmount();
+    }
   });
 
   test('连续异步切换图种丢弃旧画布解析结果', async () => {

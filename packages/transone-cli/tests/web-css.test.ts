@@ -316,9 +316,14 @@ describe('Web static stylesheets', () => {
       }
       export function exercise() {
         const component = new Child();
-        const before = component.inspect();
-        component.clear();
-        return [before, component.inspect()];
+        component.mountToNode();
+        try {
+          const before = component.inspect();
+          component.clear();
+          return [before, component.inspect()];
+        } finally {
+          component.unmount();
+        }
       }
       export const app = {
         renderHtmlDocument({ scripts = [] } = {}) {

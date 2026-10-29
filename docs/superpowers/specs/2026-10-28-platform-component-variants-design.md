@@ -131,7 +131,9 @@ Web mobile/pc 默认分别写入 `dist/build/web-mobile`、`dist/build/web-pc`�
 按父类文件解析，不按子类文件解析。方法覆盖遵循正常类继承语义。
 支持在静态编译范围内使用 `super.initState()` 的对象合并、
 `super.initStyles()` 后追加规则及调用父业务方法；超出各端编译子集的表达式明确失败。
-子类字段在父构造器调用 initState/initStyles 时尚未初始化，示例不得依赖这种字段。
+后续组件初始化修复已取消父构造器对 initState/initStyles 的调用；Web 运行时首次访问 state
+时同步初始化状态，首次挂载时初始化样式。小程序和 App 示例仍须遵循各自静态编译子集，
+实例字段已扩展为纯表达式子集，遵循父到子和声明顺序；自定义构造器仍不支持。
 
 Web、MP、App 消费同一选择结果，不各自实现一套匹配优先级。
 

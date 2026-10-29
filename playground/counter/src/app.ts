@@ -11,6 +11,8 @@ export class CounterApp extends Component<Record<string, never>, { count: number
     return { count: 0 };
   }
 
+  protected initStyles(): void {}
+
   protected increment(): void {
     this.state.count += 1;
   }

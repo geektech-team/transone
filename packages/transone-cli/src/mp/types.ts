@@ -12,6 +12,7 @@ export interface ClassSource {
   source: tsTypes.SourceFile;
   declaration: tsTypes.ClassLikeDeclaration;
   className: string;
+  rootProps?: tsTypes.Expression;
 }
 
 /** 编译生成的函数条目（页面/组件方法或生命周期钩子）。 */
@@ -50,6 +51,12 @@ export interface CompiledUnit {
   usingComponents: Record<string, string>;
   /** 内联的相对模块 JS（按依赖顺序，产物顶部拼接）。 */
   inlineModules: string[];
+  /** Runs per host instance, before initial state and user lifecycle hooks. */
+  initialization?: string;
+  initializationFields?: string[];
+  propsInitialization?: boolean;
+  rootProps?: string;
+  initializationWritesState?: boolean;
 }
 
 /** 编译过程中的上下文：跨模块共享的文件缓存与产物缓存。 */

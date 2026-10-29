@@ -571,7 +571,7 @@ function componentBindings(
       names.add(`${named.name.text}.BaseComponent`);
     }
   }
-  // Published UI bundles rename the Component base. Recognize its constructor
+  // Published UI bundles rename the Component base. Recognize its initialization
   // lifecycle and actual bundled StyleManager, rather than class names alone.
   const managers = new Set(
     classes
@@ -595,7 +595,10 @@ function componentBindings(
     let initializesState = false;
     let initializesStyles = false;
     walk(constructor.body, (node) => {
-      if (unsafeManagerAccess(node)) {
+      if (
+        unsafeManagerAccess(node) &&
+        !(isStateDefinitionTarget(node) && !unsafe.has('Object'))
+      ) {
         const assignment = node.parent;
         if (
           thisProperty(node) === 'styleManager' &&
@@ -616,6 +619,25 @@ function componentBindings(
           initializesStyles = true;
       }
     });
+    // Older bundles initialize styles in the constructor; current bundles defer
+    // them to mountToNode after derived fields exist. Both must keep the manager
+    // untouched outside its creation and the initStyles hook.
+    if (!initializesStyles) {
+      const mount = declaration.members.find(
+        (member): member is ts.MethodDeclaration =>
+          ts.isMethodDeclaration(member) && memberName(member) === 'mountToNode'
+      );
+      if (mount?.body) {
+        walk(mount.body, (node) => {
+          if (unsafeManagerAccess(node)) unsafeConstructor = true;
+          if (
+            ts.isCallExpression(node) &&
+            thisProperty(node.expression) === 'initStyles'
+          )
+            initializesStyles = true;
+        });
+      }
+    }
     const name = classBinding(declaration);
     if (
       createsManager === 1 &&
@@ -822,6 +844,25 @@ function unsafeManagerAccess(node: ts.Node): boolean {
   return (
     !(ts.isPropertyAccessExpression(parent) && parent.expression === node) &&
     !(ts.isElementAccessExpression(parent) && parent.expression === node)
+  );
+}
+
+/** The framework's lazy state descriptor does not expose its StyleManager. */
+function isStateDefinitionTarget(node: ts.Node): boolean {
+  const call = node.parent;
+  return (
+    node.kind === ts.SyntaxKind.ThisKeyword &&
+    ts.isCallExpression(call) &&
+    ts.isPropertyAccessExpression(call.expression) &&
+    ts.isIdentifier(call.expression.expression) &&
+    call.expression.expression.text === 'Object' &&
+    !identifierIsShadowed(call.expression.expression, true) &&
+    call.expression.name.text === 'defineProperty' &&
+    call.arguments.length === 3 &&
+    call.arguments[0] === node &&
+    ts.isStringLiteral(call.arguments[1]!) &&
+    call.arguments[1]!.text === 'state' &&
+    ts.isObjectLiteralExpression(call.arguments[2]!)
   );
 }
 
@@ -1238,13 +1279,20 @@ function staticValue(
   return;
 }
 
-function identifierIsShadowed(identifier: ts.Identifier): boolean {
+function identifierIsShadowed(
+  identifier: ts.Identifier,
+  includeModule = false
+): boolean {
   for (
     let parent: ts.Node | undefined = identifier.parent;
-    parent && !ts.isSourceFile(parent);
+    parent && (includeModule || !ts.isSourceFile(parent));
     parent = parent.parent
   ) {
-    if (!ts.isFunctionLike(parent)) continue;
+    if (
+      !ts.isFunctionLike(parent) &&
+      !(includeModule && ts.isSourceFile(parent))
+    )
+      continue;
     let shadowed = false;
     walk(parent, (node) => {
       if (
@@ -1252,7 +1300,14 @@ function identifierIsShadowed(identifier: ts.Identifier): boolean {
           ts.isParameter(node) ||
           ts.isBindingElement(node) ||
           ts.isClassDeclaration(node) ||
-          ts.isFunctionDeclaration(node)) &&
+          ts.isFunctionDeclaration(node) ||
+          (includeModule &&
+            (ts.isClassExpression(node) ||
+              ts.isFunctionExpression(node) ||
+              ts.isImportClause(node) ||
+              ts.isImportSpecifier(node) ||
+              ts.isNamespaceImport(node) ||
+              ts.isImportEqualsDeclaration(node)))) &&
         node.name &&
         ts.isIdentifier(node.name) &&
         node.name.text === identifier.text

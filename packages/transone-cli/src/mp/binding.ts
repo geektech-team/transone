@@ -6,6 +6,8 @@ import {
   unwrapParentheses,
 } from './fold';
 import { mpError } from './errors';
+import type { InstanceFieldPlan } from '../components/instance-fields';
+import { fieldRoot, instanceFieldPath, type FieldStateAlias } from './fields';
 
 /** 绑定表达式求值作用域：each 参数名 + render 内局部 const。 */
 export interface BindingScope {
@@ -13,6 +15,12 @@ export interface BindingScope {
   locals: Map<string, tsTypes.Expression>;
   /** 模块级 const（name -> 初始化表达式）。 */
   consts: Map<string, tsTypes.Expression>;
+  fields?: InstanceFieldPlan;
+  stateAliases?: FieldStateAlias[];
+  onFieldRead?: (key: string) => void;
+  propsInitialization?: boolean;
+  propsPacket?: string;
+  propsFallback?: string;
 }
 
 export interface BindingContext {
@@ -32,6 +40,62 @@ export function toBinding(context: BindingContext, node: tsTypes.Node): string {
   const { ts } = context;
   node = unwrapParentheses(ts, node);
 
+  const path = instanceFieldPath(node);
+  const alias =
+    path &&
+    context.scope.stateAliases?.find((alias) =>
+      alias.field.every((key, index) => path[index] === key)
+    );
+  if (path && alias) {
+    context.scope.onFieldRead?.(path[0]);
+    const keys = [...alias.state, ...path.slice(alias.field.length)];
+    if (!keys.length || !/^[A-Za-z_$][\w$]*$/.test(keys[0]))
+      throw mpError(context.filePath, 'state根对象别名必须读取具体属性');
+    return keys.reduce(
+      (text, key, index) =>
+        index === 0
+          ? key
+          : /^[A-Za-z_$][\w$]*$/.test(key)
+            ? `${text}.${key}`
+            : `${text}[${JSON.stringify(key)}]`,
+      ''
+    );
+  }
+
+  const key = fieldRoot(node);
+  if (key && context.scope.fields?.deferred.has(key)) {
+    context.scope.onFieldRead?.(key);
+    const path = instanceFieldPath(node)!;
+    return path.reduce(
+      (text, key) =>
+        /^[A-Za-z_$][\w$]*$/.test(key)
+          ? `${text}.${key}`
+          : `${text}[${singleQuoted(key)}]`,
+      '__transone_initial_fields'
+    );
+  }
+  if (
+    key &&
+    context.scope.fields?.values.has(key) &&
+    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
+  ) {
+    context.scope.onFieldRead?.(key);
+    const value = context.scope.fields.evaluate(node);
+    if (value === undefined)
+      throw mpError(context.filePath, `模板不能显示未初始化的实例字段 ${key}`);
+    const validate = (value: unknown): void => {
+      if (value === undefined)
+        throw mpError(
+          context.filePath,
+          `模板字段 ${key} 包含不可序列化的 undefined`
+        );
+      if (value && typeof value === 'object')
+        Object.values(value).forEach(validate);
+    };
+    validate(value);
+    return literalToBinding(value as FoldedValue);
+  }
+
   if (ts.isPropertyAccessExpression(node)) {
     const statePath = thisStatePath(ts, node);
     if (statePath) {
@@ -40,7 +104,10 @@ export function toBinding(context: BindingContext, node: tsTypes.Node): string {
     const propsPath = thisPropsPath(ts, node);
     if (propsPath) {
       context.onProp?.(propsPath.split('.')[0]);
-      return propsPath;
+      const packet = context.scope.propsPacket ?? '__transone_props';
+      return context.scope.propsInitialization
+        ? `(${packet} ? ${packet}.${propsPath} : ${context.scope.propsFallback ?? ''}${propsPath})`
+        : propsPath;
     }
 
     const folded = foldExpression(ts, node, context.scope.consts);

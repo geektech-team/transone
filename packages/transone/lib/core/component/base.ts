@@ -73,14 +73,60 @@ export abstract class Component<
     ((previousElement: Node, nextElement: Node) => void) | null = null;
 
   protected styleManager: StyleManager;
-  public state: TState;
+  declare public state: TState;
   public mounted = false;
 
   constructor(protected props: TProps = {} as TProps) {
+    const initialProps = props;
     this.styleManager = new StyleManager();
-    this.state = reactive(this.initState() ?? {});
-    this.templateEngine = new TemplateEngine(this.state);
-    this.initStyles();
+    this.templateEngine = new TemplateEngine({});
+
+    // Do not dispatch overridable hooks from the base constructor: derived
+    // fields (including arrow-function hooks) have not been initialized yet.
+    // Keep state an own, enumerable, writable property after its first access,
+    // including compatibility with existing state assignments/field overrides.
+    const assignState = (state: TState): void => {
+      Object.defineProperty(this, 'state', {
+        value: state,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      this.templateEngine.state = state;
+    };
+    let initializing = false;
+    let failure: { error: unknown } | undefined;
+    Object.defineProperty(this, 'state', {
+      enumerable: true,
+      configurable: true,
+      set: assignState,
+      get: () => {
+        if (failure) throw failure.error;
+        if (initializing) {
+          throw new Error('Cannot read state while initState() is running');
+        }
+        initializing = true;
+        const currentProps = this.props;
+        try {
+          // Preserve constructor props for lazy state initialization while
+          // rendering and lifecycle hooks keep reading subsequent prop updates.
+          this.props = initialProps;
+          const state = ReactiveSystem.getInstance().runWithEffect(
+            null,
+            () => reactive(this.initState() ?? {}) as TState
+          );
+          assignState(state);
+          return state;
+        } catch (error) {
+          // Repeated reads must not repeat partially completed initialization.
+          failure = { error };
+          throw error;
+        } finally {
+          this.props = currentProps;
+          initializing = false;
+        }
+      },
+    });
 
     this.updateEffect = effect(
       () => {
@@ -139,9 +185,12 @@ export abstract class Component<
       if (this.disposed) {
         this.disposed = false;
         this.updateEffect.active = true;
-        this.initStyles();
       }
-      this.beforeMount();
+      ReactiveSystem.getInstance().runWithEffect(null, () => {
+        this.templateEngine.state = this.state;
+        this.initStyles();
+        this.beforeMount();
+      });
       // Render under the component's own effect, including descendant initialization.
       this.el = ReactiveSystem.getInstance().runWithEffect(
         this.updateEffect,
@@ -151,11 +200,11 @@ export abstract class Component<
         }
       );
       this.mounted = true;
-      this.onMounted();
+      ReactiveSystem.getInstance().runWithEffect(null, () => this.onMounted());
       return this.el;
     } catch (error) {
       // Resolve the boundary while the parent chain is still intact, then release
-      // all resources created by this failed attempt (including constructor styles).
+      // all resources created by this failed initialization/mount attempt.
       const errors = new CleanupErrors();
       let handled = false;
       errors.attempt(() => {

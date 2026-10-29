@@ -3,6 +3,8 @@ import { foldExpression, isThisExpression } from './fold';
 import { mpError } from './errors';
 import { ClassSource, CompileContext } from './types';
 import { moduleConstants, ownedMethod, parentSource } from './inheritance';
+import type { InstanceFieldPlan } from '../components/instance-fields';
+import { replaceFieldReads } from './fields';
 
 export interface CompiledStyles {
   /** 本单元作用域内的 WXSS（class 等选择器）。 */
@@ -45,7 +47,8 @@ const UNITLESS_PROPERTIES = new Set([
  */
 export function compileStyles(
   context: CompileContext,
-  classSource: ClassSource
+  classSource: ClassSource,
+  fields?: InstanceFieldPlan
 ): CompiledStyles {
   const { ts } = context;
   const entries = new Map<string, StyleEntry>();
@@ -61,7 +64,9 @@ export function compileStyles(
           owner.filePath,
           'initStyles() 只支持 this.styleManager.addStyle(...) 与 super.initStyles() 调用'
         );
-      const expression = statement.expression;
+      const expression = fields?.entries.length
+        ? replaceFieldReads(statement.expression, fields, context, classSource)
+        : statement.expression;
       if (
         ts.isCallExpression(expression) &&
         ts.isPropertyAccessExpression(expression.expression) &&
@@ -185,7 +190,11 @@ function foldObjectRecord(
   }
   const result: Record<string, string | number> = {};
   for (const property of value.properties) {
-    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) {
+    if (
+      !ts.isPropertyAssignment(property) ||
+      (!ts.isIdentifier(property.name) &&
+        !ts.isStringLiteralLike(property.name))
+    ) {
       return undefined;
     }
     const folded = foldExpression(ts, property.initializer, consts);

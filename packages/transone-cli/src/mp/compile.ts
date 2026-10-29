@@ -11,6 +11,17 @@ import { compileStyles } from './styles';
 import { compileState } from './state';
 import { compileMethods } from './methods';
 import { collectInlineModules } from './inline';
+import {
+  instanceFields,
+  requiresInitialProps,
+  type FieldStateAlias,
+} from './fields';
+import {
+  analyzeInstanceFields,
+  fieldValueNode,
+  DeferredInitialProps,
+} from '../components/instance-fields';
+import { sourceSymbolAt } from './source';
 
 export interface UnitOptions {
   kind: UnitKind;
@@ -41,14 +52,49 @@ export function compileUnit(
 
   try {
     // 先编译样式，拿到 hover 选择器集合供模板生成 hover-class
-    const styles = compileStyles(context, classSource);
+    const fields = instanceFields(context, classSource);
+    let rootProps: string | undefined;
+    if (kind === 'page' && classSource.rootProps) {
+      const evaluator = analyzeInstanceFields([], {
+        resolve(node) {
+          const declaration = sourceSymbolAt(context, node)?.valueDeclaration;
+          return declaration && context.ts.isVariableDeclaration(declaration)
+            ? declaration
+            : undefined;
+        },
+        sources: context.index?.sources,
+        fail(node, message): never {
+          throw mpError(node.getSourceFile().fileName, message);
+        },
+      });
+      const value = evaluator.evaluate(classSource.rootProps);
+      if (
+        value !== undefined &&
+        (!value || typeof value !== 'object' || Array.isArray(value))
+      )
+        throw mpError(classSource.filePath, 'rootProps 必须为静态对象');
+      rootProps =
+        value === undefined
+          ? '{}'
+          : context.ts
+              .createPrinter()
+              .printNode(
+                context.ts.EmitHint.Expression,
+                fieldValueNode(value),
+                classSource.source
+              );
+    }
+    const aliases: FieldStateAlias[] = [];
+    const data = compileState(context, classSource, fields, aliases);
+    const styles = compileStyles(context, classSource, fields);
     const { template, builder } = compileTemplate(
       context,
       classSource,
       kind,
-      styles.hoverSelectors
+      styles.hoverSelectors,
+      fields,
+      aliases
     );
-    const data = compileState(context, classSource);
 
     const usedNames = new Set(builder.handlers);
     for (const emitter of builder.emitters) {
@@ -63,7 +109,8 @@ export function compileUnit(
       classSource,
       usedNames,
       kind,
-      customEvents
+      customEvents,
+      fields
     );
 
     // emitters 包装方法：还原 triggerEvent 的 e.detail.args
@@ -96,12 +143,26 @@ export function compileUnit(
       customEvents: [...customEvents],
       usingComponents,
       inlineModules: compiledMethods.inlineModules ?? legacyModules ?? [],
+      initialization: compiledMethods.initialization,
+      initializationFields: [...builder.initializationFields],
+      initializationWritesState: compiledMethods.initializationWritesState,
+      propsInitialization:
+        fields.usesProps || requiresInitialProps(context, classSource),
+      rootProps,
     };
+    for (const name of fields.propsReferenced) unit.propsReferenced.add(name);
 
     if (kind === 'component') {
       context.components.set(name, unit);
     }
     return unit;
+  } catch (error) {
+    if (error instanceof DeferredInitialProps)
+      throw mpError(
+        classSource.filePath,
+        '依赖 props 的字段不能用于静态样式或静态编译位置，请改用支持的数据绑定'
+      );
+    throw error;
   } finally {
     if (kind === 'component') {
       context.compiling.delete(name);
