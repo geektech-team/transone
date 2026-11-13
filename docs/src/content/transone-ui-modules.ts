@@ -779,7 +779,7 @@ createComponent({
 });
 
 this.state.toastVisible = true;
-setTimeout(() => (this.state.toastVisible = false), 2000);`
+setTimeout(this.guardCallback(() => (this.state.toastVisible = false)), 2000);`
     ),
   ],
 };

@@ -6,11 +6,13 @@ import {
   fieldRoot,
   instanceFieldPath,
   requiresInitialProps,
+  requiresDynamicProps,
   type FieldStateAlias,
 } from './fields';
 import { toBinding, BindingScope } from './binding';
 import { foldExpression, isThisExpression, unwrapParentheses } from './fold';
 import { mpError } from './errors';
+import { componentEventAttribute } from './component-events';
 import { ClassSource, CompileContext, warn } from './types';
 import { moduleConstants, ownedMethod, stableTag } from './inheritance';
 import { resolveClassReference, isComponentSubclass } from './analyze';
@@ -334,8 +336,13 @@ export function compileTemplate(
       consts,
       fields,
       stateAliases,
-      propsInitialization: !!fields?.usesProps || !!instanceSource.rootProps,
+      propsInitialization:
+        requiresInitialProps(context, instanceSource) ||
+        !!instanceSource.rootProps,
       propsPacket: '__transone_props',
+      propsRenderPacket: requiresDynamicProps(context, instanceSource)
+        ? '__transone_render_props'
+        : undefined,
       propsFallback: '',
       onFieldRead: (key) => {
         if (fields?.deferred.has(key)) builder.initializationFields.add(key);
@@ -1101,7 +1108,9 @@ function compileComponent(
       const key = `__transone_emitter_${eventName}_${env.builder.emitters.length}`;
       usage.key = key;
       env.builder.emitters.push(usage);
-      attrs.push(`bind:${eventName}="${key}"`);
+      attrs.push(
+        `${componentEventAttribute(context.dialect, eventName)}="${key}"`
+      );
     }
   }
 

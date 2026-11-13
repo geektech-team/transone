@@ -44,6 +44,18 @@ function flatten(node: NativeNode): NativeNode[] {
   ];
 }
 
+it.each(['app-ios', 'app-android', 'app-harmony'] as const)(
+  '%s preserves optional-chain short circuit for props fields and initial state',
+  async (target) => {
+    const root = fixture(
+      `import {BaseComponent,h} from 'transone';export class App extends BaseComponent {seed=this.props.config?.nested.count??5;initState(){return{count:this.seed,original:this.props.config?.nested.count??7};}initStyles(){}render(){return h('main',{},[h('text',{},[this.seed,this.state.count])]);}}`
+    );
+    const config = await resolveConfig({ root, target });
+    const screen = await analyzeNativeScreen(join(root, 'src/main.ts'), config);
+    expect(screen.state.map((entry) => entry.value)).toEqual([5, 7]);
+  }
+);
+
 it('rejects module lexical this instead of resolving it against component props', async () => {
   const root = fixture(
     `import {BaseComponent,h} from 'transone';const BROKEN=this.props.seed;export class App extends BaseComponent {initState(){return {count:BROKEN};}initStyles(){}render(){return h('main',{},[]);}}`,
@@ -187,7 +199,8 @@ it('keeps fields and child state at their initial props while direct props remai
     if (action.kind === 'sequence') action.actions.forEach(run);
     else if (action.kind === 'increment')
       values[action.key] = Number(values[action.key]) + action.by;
-    else values[action.key] = action.value;
+    else if (action.kind === 'set-literal') values[action.key] = action.value;
+    else throw new Error('This static fixture must not contain runtime actions');
   }
   if (!button || button.kind !== 'button')
     throw new Error('Missing change button');

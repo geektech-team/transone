@@ -498,6 +498,7 @@ export class ReactiveSystem {
 
   // 停止一个effect的执行
   public stop(effect: ReactiveEffect): void {
+    reactiveScheduler.cancel(effect);
     if (effect.active) {
       this.cleanup(effect);
       effect.active = false;

@@ -1,4 +1,4 @@
-import { createComponent, type VNode } from 'transone';
+import { Bind, createComponent, type VNode } from 'transone';
 import { TuInput } from 'transone-ui';
 import { DemoHost } from './DemoHost';
 
@@ -15,11 +15,20 @@ export class DemoInput extends DemoHost<DemoInputState> {
   protected renderDemo(): VNode {
     return createComponent({
       component: TuInput,
-      props: { value: this.state.value, placeholder: '请输入…', clearable: true },
+      props: {
+        value: this.state.value,
+        placeholder: '请输入…',
+        clearable: true,
+      },
       emitters: {
-        input: (...args: unknown[]) => this.setState({ value: args[0] as string }),
+        input: this.onInput,
       },
     }) as unknown as VNode;
+  }
+
+  @Bind()
+  private onInput(value: unknown): void {
+    this.setState({ value: value as string });
   }
 
   protected renderNote(): VNode[] {

@@ -120,6 +120,75 @@ describe('native app build', () => {
     expect(project).toContain('PRODUCT_BUNDLE_IDENTIFIER = com.transone.app;');
   });
 
+  it('connects the generated Android app module to its launcher activity', async () => {
+    const root = makeRoot();
+    writeFileSync(
+      join(root, 'src', 'main.ts'),
+      `
+      export class App { render() { return { tag: 'main', children: [] }; } }
+    `
+    );
+    const bundleId = 'com.example.counter';
+    const { outDir } = await build({
+      root,
+      target: 'app-android',
+      config: { app: { bundleId, appName: 'Counter & Co' } },
+    });
+    const read = (path: string) => readFileSync(join(outDir, path), 'utf8');
+    expect(read('settings.gradle.kts')).toContain('include(":app")');
+    const module = read('app/build.gradle.kts');
+    expect(module).toContain('id("com.android.application")');
+    expect(module).not.toContain('apply false');
+    expect(module).toContain('compose = true');
+    expect(module).toContain(`applicationId = "${bundleId}"`);
+    const manifest = read('app/src/main/AndroidManifest.xml');
+    expect(manifest).toContain('android:label="Counter &amp; Co"');
+    expect(manifest).toContain('android:name=".MainActivity"');
+    expect(manifest).toContain('android.intent.category.LAUNCHER');
+    expect(
+      read('app/src/main/java/com/example/counter/MainActivity.kt')
+    ).toContain(`package ${bundleId}`);
+  });
+
+  it('connects the generated HarmonyOS Stage entry ability to its ArkUI page', async () => {
+    const root = makeRoot();
+    writeFileSync(
+      join(root, 'src', 'main.ts'),
+      `
+      export class App { render() { return { tag: 'main', children: [] }; } }
+    `
+    );
+    const { outDir } = await build({
+      root,
+      target: 'app-harmony',
+      config: { app: { appName: 'Counter "Pro"' } },
+    });
+    const read = (path: string) => readFileSync(join(outDir, path), 'utf8');
+    expect(read('hvigorfile.ts')).toContain('appTasks');
+    const profile = JSON.parse(read('build-profile.json5'));
+    const [{ name, srcPath }] = profile.modules;
+    expect(read(`${srcPath}/hvigorfile.ts`)).toContain('hapTasks');
+    const entry = `${srcPath}/src/main`;
+    const { module } = JSON.parse(read(`${entry}/module.json5`));
+    expect(module.name).toBe(name);
+    const ability = module.abilities.find(
+      (candidate: { name: string }) => candidate.name === module.mainElement
+    );
+    expect(ability.exported).toBe(true);
+    const pages = module.pages.replace('$profile:', '');
+    const {
+      src: [page],
+    } = JSON.parse(read(`${entry}/resources/base/profile/${pages}.json`));
+    expect(read(`${entry}/${ability.srcEntry}`)).toContain(
+      `loadContent('${page}'`
+    );
+    expect(read(`${entry}/ets/${page}.ets`)).toContain('@Entry');
+    expect(
+      JSON.parse(read('AppScope/resources/base/element/string.json')).string[0]
+        .value
+    ).toBe('Counter "Pro"');
+  });
+
   it('rejects unsupported source before replacing existing output', async () => {
     const root = makeRoot();
     writeFileSync(join(root, 'src', 'main.ts'), `

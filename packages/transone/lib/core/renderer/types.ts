@@ -41,8 +41,12 @@ export interface RenderRuntimeContext {
   appContext?: unknown;
   renderer: RendererHost;
   slots: Record<string, Array<VNode | string>>;
+  guardCallback?: <Args extends unknown[]>(
+    callback: (...args: Args) => unknown
+  ) => (...args: Args) => unknown;
   registerChild(component: ComponentInstance): void;
   unregisterChild(component: ComponentInstance): void;
+  onElementChange?(previous: Node, next: Node): void;
 }
 
 export interface RenderStrategy<T extends Renderable = Renderable> {

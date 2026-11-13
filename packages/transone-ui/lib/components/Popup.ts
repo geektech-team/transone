@@ -42,6 +42,7 @@ export class TuPopup extends Component<TuPopupProps, TuPopupState> {
   private lastPosition: TuPopupPosition | null = null;
   /** 方向切换后延迟恢复可见性的计时器。 */
   private visibleTimer: ReturnType<typeof setTimeout> | null = null;
+  private visibleTransition: object | null = null;
   /** 方向切换中间帧标志：setState 触发的更新不再把 appliedVisible 拉回 props。 */
   private pendingPositionTransition = false;
 
@@ -102,7 +103,8 @@ export class TuPopup extends Component<TuPopupProps, TuPopupState> {
         boxSizing: 'border-box',
         overflowY: 'auto',
         position: 'absolute',
-        transition: 'transform var(--tu-duration, 300ms) ease, visibility 0s var(--tu-duration, 300ms)',
+        transition:
+          'transform var(--tu-duration, 300ms) ease, visibility 0s var(--tu-duration, 300ms)',
         visibility: 'hidden',
       },
     });
@@ -251,6 +253,8 @@ export class TuPopup extends Component<TuPopupProps, TuPopupState> {
   }
 
   protected onUnmounted(): void {
+    this.visibleTransition = null;
+    this.pendingPositionTransition = false;
     if (this.visibleTimer !== null) {
       clearTimeout(this.visibleTimer);
       this.visibleTimer = null;
@@ -277,14 +281,19 @@ export class TuPopup extends Component<TuPopupProps, TuPopupState> {
     if (!this.pendingPositionTransition && this.visibleTimer !== null) {
       clearTimeout(this.visibleTimer);
       this.visibleTimer = null;
+      this.visibleTransition = null;
     }
 
     if (positionChanged && visible) {
       // 方向切换 + 可见：先瞬移到新方向离屏位（关闭过渡，取消跨方向动画），
       // 延迟一帧恢复可见，从新方向正常滑入。
       this.pendingPositionTransition = true;
+      const transition = {};
+      this.visibleTransition = transition;
       this.setState({ appliedVisible: false, noTransition: true });
       this.visibleTimer = setTimeout(() => {
+        if (this.visibleTransition !== transition) return;
+        this.visibleTransition = null;
         this.visibleTimer = null;
         this.pendingPositionTransition = false;
         if (this.mounted) {

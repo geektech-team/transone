@@ -10,6 +10,7 @@ import {
 } from '../src/mp/props-runtime';
 
 interface RuntimeUnit extends CompiledUnit {
+  initializationKeys?: string[];
   initializationFields?: string[];
   propsInitialization?: boolean;
   rootProps?: string;
@@ -126,6 +127,325 @@ function mount(
 }
 
 describe('mini program native props initialization runtime', () => {
+  for (const target of [
+    'mp-weixin',
+    'mp-bytedance',
+    'mp-xiaohongshu',
+    'mp-alipay',
+  ] as const) {
+    const dialect = MP_DIALECTS[target]!;
+    it(`${target} restores declared fields after initializer failure and retries with current props`, () => {
+      const failure = new Error('field initialization failed');
+      const runtime = load(
+        unit({
+          initializationKeys: ['captured', 'fresh'],
+          initializationFields: ['captured'],
+          initialization: `function(){
+        this.attempts=(this.attempts||0)+1;
+        Object.defineProperty(this,'captured',{value:{seed:this.__transone_initial_props.seed},writable:true,enumerable:true,configurable:true});
+        Object.defineProperty(this,'fresh',{value:[this.__transone_initial_props.seed],writable:true,enumerable:true,configurable:true});
+        if(this.failInitialization) throw failure;
+        return {count:this.__transone_initial_props.seed};
+      }`,
+        }),
+        dialect,
+        failure
+      );
+      const value = host(runtime, { failInitialization: true });
+      const previous = { seed: -1 };
+      Object.defineProperty(value, 'captured', {
+        value: previous,
+        writable: false,
+        enumerable: false,
+        configurable: true,
+      });
+      const descriptor = Object.getOwnPropertyDescriptor(value, 'captured');
+      let reads = 0;
+      Object.defineProperty(value, 'unrelated', {
+        get() {
+          reads++;
+          throw new Error('must not execute');
+        },
+        configurable: true,
+      });
+      const beforeSetData = Object.getOwnPropertyDescriptor(value, 'setData');
+      setProps(value, getPropsContainer(dialect), {
+        __transone_props: { seed: 2 },
+      });
+      expect(() => mount(runtime, value, dialect)).toThrow(failure);
+      expect(Object.getOwnPropertyDescriptor(value, 'captured')).toEqual(
+        descriptor
+      );
+      expect(Object.prototype.hasOwnProperty.call(value, 'fresh')).toBe(false);
+      expect(Object.getOwnPropertyDescriptor(value, 'setData')).toEqual(
+        beforeSetData
+      );
+      expect(value.__transone_fields_ready).toBeUndefined();
+      expect(reads).toBe(0);
+      value.failInitialization = false;
+      setProps(value, getPropsContainer(dialect), {
+        __transone_props: { seed: 7 },
+      });
+      mount(runtime, value, dialect);
+      expect(runtime.state(value).count).toBe(7);
+      expect(value.captured.seed).toBe(7);
+      expect(value.fresh).toEqual([7]);
+      expect(value.attempts).toBe(2);
+      const wrapped = value.setData;
+      mount(runtime, value, dialect);
+      expect(value.setData).toBe(wrapped);
+      expect(value.attempts).toBe(2);
+    });
+
+    it(`${target} restores native data and inherited setData after a partially applied initial patch`, () => {
+      const failure = new Error('native initial patch failed');
+      const runtime = load(
+        unit({
+          initializationKeys: ['captured'],
+          initializationFields: ['captured'],
+          initialization: `function(){
+        Object.defineProperty(this,'captured',{value:this.__transone_initial_props.seed,writable:true,enumerable:true,configurable:true});
+        return {count:this.captured};
+      }`,
+        }),
+        dialect,
+        failure
+      );
+      const value = host(runtime, { failNative: true });
+      const originalNative = value.setData;
+      let calls = 0;
+      const prototype = {
+        setData(
+          this: Record<string, any>,
+          patch: Record<string, any>,
+          callback?: () => void
+        ) {
+          calls++;
+          if (this.failNative) {
+            this.data.nested.value = 99;
+            this.data.rows.push('partial');
+            this.data.added = 'partial';
+            this.data.count = patch.count;
+            throw failure;
+          }
+          return originalNative.call(this, patch, callback);
+        },
+      };
+      Object.setPrototypeOf(value, prototype);
+      delete value.setData;
+      const nested = { value: 1 };
+      const rows = ['kept'];
+      Object.assign(value.data, { nested, alias: nested, rows });
+      let getterReads = 0;
+      Object.defineProperty(value.data, 'untouchedGetter', {
+        get() {
+          getterReads++;
+          return 'untouched';
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      setProps(value, getPropsContainer(dialect), {
+        __transone_props: { seed: 2 },
+      });
+      const data = value.data;
+      expect(() => mount(runtime, value, dialect)).toThrow(failure);
+      expect(value.data).toBe(data);
+      expect(data.nested).toBe(nested);
+      expect(data.alias).toBe(nested);
+      expect(nested.value).toBe(1);
+      expect(data.rows).toBe(rows);
+      expect(rows).toEqual(['kept']);
+      expect(Object.prototype.hasOwnProperty.call(data, 'added')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(data, 'count')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(value, 'captured')).toBe(
+        false
+      );
+      expect(Object.prototype.hasOwnProperty.call(value, 'setData')).toBe(
+        false
+      );
+      expect(value.setData).toBe(prototype.setData);
+      expect(getterReads).toBe(0);
+      value.failNative = false;
+      setProps(value, getPropsContainer(dialect), {
+        __transone_props: { seed: 6 },
+      });
+      mount(runtime, value, dialect);
+      expect(runtime.state(value).count).toBe(6);
+      value.setData({ count: 8 });
+      expect(calls).toBe(3);
+      expect(runtime.state(value).count).toBe(8);
+      expect(getterReads).toBe(0);
+    });
+
+    it(`${target} skips lifecycle work reentered by the first native patch`, () => {
+      const runtime = load(
+        unit({
+          lifecycle: [
+            { key: 'created', fn: `function(){this.sequence.push('before');}` },
+            {
+              key: 'attached',
+              fn: `function(){this.sequence.push('mounted');}`,
+            },
+          ],
+        }),
+        dialect
+      );
+      const value = host(runtime, { sequence: [] });
+      const originalNative = value.setData;
+      let reentered = false;
+      value.setData = function (patch: Record<string, any>) {
+        if (!reentered) {
+          reentered = true;
+          runtime.hooks[target === 'mp-alipay' ? 'onInit' : 'attached']!.call(
+            this
+          );
+        }
+        return originalNative.call(this, patch);
+      };
+      mount(runtime, value, dialect);
+      expect(value.sequence).toEqual(['before', 'mounted']);
+      expect(value.initializations).toBe(1);
+    });
+  }
+
+  it('rejects native props accessors before evaluating them or defining fields', () => {
+    const dialect = MP_DIALECTS['mp-weixin']!;
+    const runtime = load(
+      unit({
+        initializationKeys: ['captured'],
+        initializationFields: [],
+        initialization: `function(){this.captured=this.__transone_initial_props.seed;return {count:this.captured};}`,
+      }),
+      dialect
+    );
+    let reads = 0;
+    const packet = Object.defineProperty({}, 'seed', {
+      enumerable: true,
+      get() {
+        reads++;
+        return 3;
+      },
+    });
+    const value = host(runtime, { properties: { __transone_props: packet } });
+    expect(() => mount(runtime, value, dialect)).toThrow(
+      /props.*getter|props.*accessor/
+    );
+    expect(reads).toBe(0);
+    expect(value.captured).toBeUndefined();
+    expect(value.calls).toEqual([]);
+  });
+
+  it('preserves the original error and continues cleanup when one field cannot be restored', () => {
+    const dialect = MP_DIALECTS['mp-weixin']!;
+    const failure = new Error('primary initialization error');
+    const runtime = load(
+      unit({
+        initializationKeys: ['blocked', 'fresh'],
+        initializationFields: [],
+        initialization: `function(){Object.defineProperty(this,'blocked',{value:1,configurable:false});Object.defineProperty(this,'fresh',{value:2,configurable:true});throw failure;}`,
+      }),
+      dialect,
+      failure
+    );
+    const value = host(runtime);
+    let actual: unknown;
+    try {
+      mount(runtime, value, dialect);
+    } catch (error) {
+      actual = error;
+    }
+    expect(actual).toBe(failure);
+    expect(
+      (failure as Error & { cleanupErrors?: unknown[] }).cleanupErrors
+    ).toHaveLength(1);
+    expect(Object.prototype.hasOwnProperty.call(value, 'fresh')).toBe(false);
+    expect(value.__transone_initial_props).toBeUndefined();
+    expect(value.__transone_initializing).toBeUndefined();
+  });
+
+  it('restores the initialization guard if reading the native setData method throws', () => {
+    const dialect = MP_DIALECTS['mp-weixin']!;
+    const failure = new Error('native setData unavailable');
+    const runtime = load(unit(), dialect);
+    const value = host(runtime);
+    Object.defineProperty(value, 'setData', {
+      get() {
+        throw failure;
+      },
+      configurable: true,
+    });
+    expect(() => mount(runtime, value, dialect)).toThrow(failure);
+    expect(value.__transone_initializing).toBeUndefined();
+  });
+
+  it('rejects the internal props packet accessor without executing it', () => {
+    const dialect = MP_DIALECTS['mp-weixin']!;
+    const runtime = load(unit(), dialect);
+    let reads = 0;
+    const properties = Object.defineProperty({}, '__transone_props', {
+      enumerable: true,
+      get() {
+        reads++;
+        return { seed: 4 };
+      },
+    });
+    const value = host(runtime, { properties });
+    expect(() => mount(runtime, value, dialect)).toThrow(
+      /props.*getter|props.*accessor/
+    );
+    expect(reads).toBe(0);
+    expect(value.__transone_initializing).toBeUndefined();
+  });
+
+  it('does not run Alipay didMount while its first native data patch is initializing', () => {
+    const dialect = MP_DIALECTS['mp-alipay']!;
+    const runtime = load(
+      unit({
+        lifecycle: [
+          { key: 'created', fn: `function(){this.sequence.push('before');}` },
+          { key: 'attached', fn: `function(){this.sequence.push('mounted');}` },
+        ],
+      }),
+      dialect
+    );
+    const value = host(runtime, { sequence: [] });
+    const originalNative = value.setData;
+    value.setData = function (patch: Record<string, any>) {
+      runtime.hooks.didMount!.call(this);
+      return originalNative.call(this, patch);
+    };
+    mount(runtime, value, dialect);
+    expect(value.sequence).toEqual(['before', 'mounted']);
+  });
+
+  it('does not run a page onLoad reentered by its first native data patch', () => {
+    const dialect = MP_DIALECTS['mp-weixin']!;
+    const runtime = load(
+      unit({
+        kind: 'page',
+        lifecycle: [
+          {
+            key: 'onLoad',
+            fn: `function(query){this.sequence.push(query.id);return query.id;}`,
+          },
+        ],
+      }),
+      dialect
+    );
+    const value = host(runtime, { sequence: [], readyForData: true });
+    const originalNative = value.setData;
+    let reentered = false;
+    value.setData = function (patch: Record<string, any>) {
+      if (!reentered) {
+        reentered = true;
+        runtime.hooks.onLoad!.call(this, { id: 'inner' });
+      }
+      return originalNative.call(this, patch);
+    };
+    expect(runtime.hooks.onLoad!.call(value, { id: 'outer' })).toBe('outer');
+    expect(value.sequence).toEqual(['outer']);
+  });
   for (const [target, container] of [
     ['mp-weixin', 'properties'],
     ['mp-bytedance', 'properties'],
@@ -541,12 +861,18 @@ describe('mini program native props initialization runtime', () => {
     expect(value.started).toBe(true);
     expect(value.mounted).toBe(true);
     expect(value.removed).toBe(true);
-    expect(
-      lifecycleEntries(
-        unit({ initialization: undefined, lifecycle }),
-        MP_DIALECTS['mp-weixin']!
-      )
-    ).toEqual(lifecycle);
+    const weixin = load(
+      unit({ initialization: undefined, lifecycle }),
+      MP_DIALECTS['mp-weixin']!
+    );
+    const plain = host(weixin);
+    weixin.hooks.created?.call(plain);
+    expect(plain.started).toBeUndefined();
+    weixin.hooks.attached!.call(plain);
+    expect(plain.started).toBe(true);
+    expect(plain.mounted).toBe(true);
+    weixin.hooks.detached!.call(plain);
+    expect(plain.removed).toBe(true);
   });
 
   for (const initialized of [false, true])

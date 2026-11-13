@@ -1,15 +1,15 @@
 import type * as tsTypes from 'typescript';
 import { foldExpression, FoldedValue, isThisExpression } from './fold';
-import {
-  moduleConstants,
-  ownedMethods,
-  ownedMethod,
-  parentSource,
-} from './inheritance';
+import { moduleConstants, ownedMethods, parentSource } from './inheritance';
 import { MethodModuleLinker } from './inline';
 import { mpError } from './errors';
 import { ClassSource, CompileContext, FunctionEntry, UnitKind } from './types';
 import type { InstanceFieldPlan } from '../components/instance-fields';
+import {
+  readMethodDecorators,
+  validateMethodDecoratorTargets,
+  type MethodDecoratorSpec,
+} from '../components/method-decorators';
 
 const PAGE_LIFECYCLE: Record<string, string> = {
   beforeMount: 'onLoad',
@@ -32,12 +32,38 @@ const COMPONENT_LIFECYCLE: Record<string, string> = {
   onUnmounted: 'detached',
 };
 
+const LIFECYCLE_METHODS = new Set([
+  ...Object.keys(PAGE_LIFECYCLE),
+  ...Object.values(PAGE_LIFECYCLE),
+  ...Object.keys(COMPONENT_LIFECYCLE),
+  ...Object.values(COMPONENT_LIFECYCLE),
+  'onInit',
+  'didMount',
+  'didUnmount',
+  'didUpdate',
+]);
+
 export interface CompiledMethods {
   methods: FunctionEntry[];
+  decoratedMethods?: Array<{ key: string } & MethodDecoratorSpec>;
   lifecycle: FunctionEntry[];
   inlineModules?: string[];
   initialization?: string;
   initializationWritesState?: boolean;
+  guardedCallbacks?: boolean;
+  propsUpdates?: boolean;
+}
+
+function methodKey(
+  ts: typeof tsTypes,
+  name: tsTypes.PropertyName,
+  source: tsTypes.SourceFile
+): string {
+  return ts.isIdentifier(name) ||
+    ts.isStringLiteralLike(name) ||
+    ts.isNumericLiteral(name)
+    ? name.text
+    : name.getText(source);
 }
 
 /**
@@ -45,7 +71,7 @@ export interface CompiledMethods {
  * - this.state.x -> this.data.x
  * - this.setState(obj) -> this.setData(obj)
  * - this.state.a.b = expr / += -> this.setData({ 'a.b': expr })
- * - 组件内 this.emit('name', args) -> this.triggerEvent('name', { args })
+ * - 组件内 this.emit('name', args) -> 平台组件事件桥
  * - 方法体中的模块常量原地折叠为字面量
  */
 export function compileMethods(
@@ -59,15 +85,90 @@ export function compileMethods(
   const { ts } = context;
   const methods = new Map(
     ownedMethods(context, classSource).map((item) => [
-      item.declaration.name.getText(item.owner.source),
+      methodKey(ts, item.declaration.name, item.owner.source),
       item,
     ])
   );
+  const decoratedMethods: Array<{ key: string } & MethodDecoratorSpec> = [];
+  // Validate all selected members, including methods removed by reachability and
+  // unsupported static/accessor targets, rather than silently erasing decorators.
+  const owners = new Set([
+    classSource,
+    ...[...methods.values()].map((item) => item.owner),
+  ]);
+  for (
+    let owner = parentSource(context, classSource);
+    owner;
+    owner = parentSource(context, owner)
+  )
+    owners.add(owner);
+  for (const owner of owners) {
+    validateMethodDecoratorTargets(
+      context.index,
+      owner.source,
+      owner.declaration
+    );
+    for (const member of owner.declaration.members) {
+      if (ts.isMethodDeclaration(member)) {
+        const spec = readMethodDecorators(context.index, owner.source, member);
+        const name = methodKey(ts, member.name, owner.source);
+        if (spec && LIFECYCLE_METHODS.has(name))
+          throw mpError(owner.filePath, `生命周期方法 ${name} 不支持装饰器`);
+      }
+    }
+  }
+  for (const [key, owned] of methods) {
+    const spec = readMethodDecorators(
+      context.index,
+      owned.owner.source,
+      owned.declaration
+    );
+    if (spec) {
+      if (spec.emit) {
+        if (kind !== 'component')
+          throw mpError(
+            owned.owner.filePath,
+            '页面组件不能使用 @Emit（组件间事件仅自定义组件支持）'
+          );
+        customEvents.add(spec.emit.eventName);
+      }
+      decoratedMethods.push({ key, ...spec });
+    }
+  }
+  // Replacing an effective member in the inherited method map retains its base
+  // insertion position. Decorator initialization instead follows declaration
+  // ownership: base classes first, then each class's own source order.
+  const depths = new Map<ClassSource, number>();
+  const depth = (owner: ClassSource): number => {
+    const cached = depths.get(owner);
+    if (cached !== undefined) return cached;
+    let result = 0;
+    for (
+      let parent = parentSource(context, owner);
+      parent;
+      parent = parentSource(context, parent)
+    )
+      result++;
+    depths.set(owner, result);
+    return result;
+  };
+  decoratedMethods.sort((left, right) => {
+    const a = methods.get(left.key)!;
+    const b = methods.get(right.key)!;
+    return (
+      depth(a.owner) - depth(b.owner) || a.declaration.pos - b.declaration.pos
+    );
+  });
   const linker = context.index ? new MethodModuleLinker(context) : undefined;
   const parentAliases = new Map<string, string>();
   const resolveSuper = (owner: ClassSource, name: string): string => {
     const parent = parentSource(context, owner);
-    const owned = parent && ownedMethod(context, parent, name);
+    const owned =
+      parent &&
+      ownedMethods(context, parent).find(
+        (item) =>
+          methodKey(ts, item.declaration.name, item.owner.source) === name
+      );
     if (!owned)
       throw mpError(owner.filePath, `不支持 super.${name}(): 未找到父业务方法`);
     const identity = `${owned.owner.filePath}:${owned.declaration.pos}`;
@@ -81,6 +182,7 @@ export function compileMethods(
 
   const lifecycleMap = kind === 'page' ? PAGE_LIFECYCLE : COMPONENT_LIFECYCLE;
   const seed = new Set(usedNames);
+  for (const entry of decoratedMethods) seed.add(entry.key);
   const runtimeInitialization =
     !!fields &&
     (fields.entries.length > 0 || fields.usesProps || !!classSource.rootProps);
@@ -133,7 +235,8 @@ export function compileMethods(
       resolveSuper,
       linker,
       runtimeInitialization &&
-        owned.declaration.name.getText(owned.owner.source) === 'initState',
+        methodKey(ts, owned.declaration.name, owned.owner.source) ===
+          'initState',
       runtimeInitialization
     );
     if (lifecycleKey) {
@@ -191,6 +294,8 @@ export function compileMethods(
       .outputText.trim();
   }
   let initializationWritesState = false;
+  let guardedCallbacks = false;
+  let propsUpdates = false;
   for (const entry of [...entries, ...lifecycleEntries]) {
     const source = ts.createSourceFile(
       'method.ts',
@@ -201,21 +306,40 @@ export function compileMethods(
     const visit = (node: tsTypes.Node): void => {
       if (
         ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        ['__transone_guard_callback', '__transone_set_props'].includes(
+          node.expression.text
+        )
+      )
+        guardedCallbacks = true;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === '__transone_set_props'
+      )
+        propsUpdates = true;
+      if (
+        ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
         node.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
         node.expression.name.text === 'setData'
-      )
+      ) {
         initializationWritesState = true;
+        if (node.arguments.length > 1) guardedCallbacks = true;
+      }
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
   return {
     methods: entries,
+    decoratedMethods: decoratedMethods.length ? decoratedMethods : undefined,
     lifecycle: lifecycleEntries,
     inlineModules: linker?.modules(),
     initialization,
     initializationWritesState,
+    guardedCallbacks,
+    propsUpdates,
   };
 }
 
@@ -232,6 +356,7 @@ function compileMethod(
   runtimeInitialization = false
 ): string {
   const { ts } = context;
+
   if (!declaration.body) {
     throw mpError(
       classSource.filePath,
@@ -328,6 +453,23 @@ function visit(
 ): tsTypes.Node {
   const { ts } = context;
 
+  if (
+    ts.isCallExpression(node) &&
+    isThisMemberCall(ts, node, 'guardCallback')
+  ) {
+    if (node.arguments.length !== 1)
+      throw mpError(classSource.filePath, 'guardCallback 需要一个回调参数');
+    return ts.visitEachChild(
+      ts.factory.createCallExpression(
+        ts.factory.createIdentifier('__transone_guard_callback'),
+        undefined,
+        [ts.factory.createThis(), node.arguments[0]]
+      ),
+      (child) => visit(context, classSource, child, state),
+      state.transformContext
+    );
+  }
+
   if (ts.isFunctionLike(node)) {
     for (const parameter of node.parameters) {
       if (ts.isIdentifier(parameter.name)) {
@@ -386,6 +528,21 @@ function visit(
     }
   }
 
+  // setProps is a logical props commit, independent of native state updates.
+  if (ts.isCallExpression(node) && isThisMemberCall(ts, node, 'setProps')) {
+    if (node.arguments.length !== 1)
+      throw mpError(classSource.filePath, 'setProps 需要一个 props 对象参数');
+    return ts.visitEachChild(
+      ts.factory.createCallExpression(
+        ts.factory.createIdentifier('__transone_set_props'),
+        undefined,
+        [ts.factory.createThis(), node.arguments[0]]
+      ),
+      (child) => visit(context, classSource, child, state),
+      state.transformContext
+    );
+  }
+
   // this.setState(obj) -> this.setData(obj)
   if (ts.isCallExpression(node) && isThisMemberCall(ts, node, 'setState')) {
     const call = ts.factory.createCallExpression(
@@ -403,7 +560,7 @@ function visit(
     );
   }
 
-  // this.emit('name', args) -> this.triggerEvent('name', { args })
+  // Both explicit emits and @Emit use the dialect's component event bridge.
   if (ts.isCallExpression(node) && isThisMemberCall(ts, node, 'emit')) {
     if (state.kind !== 'component') {
       throw mpError(
@@ -422,16 +579,10 @@ function visit(
     const args = ts.factory.createArrayLiteralExpression(
       node.arguments.slice(1)
     );
-    const payload = ts.factory.createObjectLiteralExpression([
-      ts.factory.createPropertyAssignment('args', args),
-    ]);
     const call = ts.factory.createCallExpression(
-      ts.factory.createPropertyAccessExpression(
-        ts.factory.createThis(),
-        'triggerEvent'
-      ),
+      ts.factory.createIdentifier('__transone_emit'),
       undefined,
-      [eventName, payload]
+      [ts.factory.createThis(), eventName, args]
     );
     return ts.visitEachChild(
       call,
@@ -582,7 +733,13 @@ function isValueReference(
   return !ts.isShorthandPropertyAssignment(parent);
 }
 
-const BRIDGE_METHODS = new Set(['emit', 'setState', 'setData', 'triggerEvent']);
+const BRIDGE_METHODS = new Set([
+  'emit',
+  'setProps',
+  'setState',
+  'setData',
+  'triggerEvent',
+]);
 
 /**
  * 把 this.state.path 赋值表达式改写为 this.setData({ path: value })。

@@ -1,7 +1,8 @@
 import { Router } from './index';
-
-// 创建一个全局路由实例
-let router: Router | null = null;
+import {
+  getRouter as getCurrentRouter,
+  setCurrentRouter,
+} from './instance-state';
 
 /**
  * 设置全局路由实例
@@ -11,7 +12,7 @@ export function setRouter(r: Router): void {
   if (!r || !(r instanceof Router)) {
     throw new Error('Invalid router instance');
   }
-  router = r;
+  setCurrentRouter(r);
 }
 
 /**
@@ -20,6 +21,7 @@ export function setRouter(r: Router): void {
  * @throws 当路由未初始化时抛出错误
  */
 export function useRouter(): Router {
+  const router = getCurrentRouter();
   if (!router) {
     throw new Error(
       'Router is not initialized. Please make sure you have installed the router plugin.'
@@ -33,7 +35,7 @@ export function useRouter(): Router {
  * @returns 路由实例或null
  */
 export function getRouter(): Router | null {
-  return router;
+  return getCurrentRouter();
 }
 
 /**
@@ -41,12 +43,12 @@ export function getRouter(): Router | null {
  * @returns 是否已初始化
  */
 export function hasRouter(): boolean {
-  return router !== null;
+  return getCurrentRouter() !== null;
 }
 
 /**
  * 重置路由实例（主要用于测试）
  */
 export function resetRouter(): void {
-  router = null;
+  setCurrentRouter(null);
 }

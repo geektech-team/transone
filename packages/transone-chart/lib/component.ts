@@ -56,12 +56,14 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   private chart: ChartBase<ChartOption> | null = null;
   private chartType: ChartType | null = null;
   private attachVersion = 0;
+  private mountRevision = 0;
   private destroyed = false;
   private resizeDebounced: Debounced<() => void> | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private mpResizeHandler: (() => void) | null = null;
   /** Web 端 hover 事件句柄（mousemove / mouseleave），卸载时移除。 */
   private hoverHandlers: Array<[string, (e: Event) => void]> = [];
+  private hoverElement: HTMLCanvasElement | null = null;
 
   protected initState(): TcChartState {
     return { canvasId: CANVAS_ID };
@@ -95,6 +97,8 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   }
 
   protected onMounted(): void {
+    this.destroyed = false;
+    this.mountRevision++;
     this.attachChart();
     this.setupAutoResize();
     this.setupHoverEvents();
@@ -116,9 +120,11 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   }
 
   protected onUnmounted(): void {
+    this.destroyed = true;
+    this.mountRevision++;
+    this.attachVersion = (this.attachVersion ?? 0) + 1;
     this.teardownAutoResize();
     this.teardownHoverEvents();
-    this.destroyed = true;
     this.chart?.destroy();
     this.chart = null;
   }
@@ -128,6 +134,32 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     return this.chart;
   }
 
+  /** Older supported TransOne peers lack guardCallback. Keep these synchronous
+   * chart continuations scoped without requiring that newer optional API. */
+  private guardChartCallback<Args extends unknown[], Result>(
+    callback: (...args: Args) => Result
+  ): (...args: Args) => Result | undefined {
+    const guard: unknown = Reflect.get(this, 'guardCallback');
+    if (typeof guard === 'function') {
+      return guard.call(this, callback) as (
+        ...args: Args
+      ) => Result | undefined;
+    }
+    const component = this;
+    const revision = this.mountRevision;
+    const current = (): boolean =>
+      !component.destroyed && component.mountRevision === revision;
+    return function (this: unknown, ...args: Args): Result | undefined {
+      if (!current()) return;
+      try {
+        const result = callback.apply(this, args);
+        return current() ? result : undefined;
+      } catch (error) {
+        if (current()) throw error;
+      }
+    };
+  }
+
   private attachChart(): void {
     if (this.destroyed) {
       return;
@@ -135,20 +167,24 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
     const version = (this.attachVersion ?? 0) + 1;
     this.attachVersion = version;
     this.resolveContext()
-      .then((context) => {
-        if (this.destroyed || !context || version !== this.attachVersion) {
-          // 非浏览器环境（SSR / 构建期静态渲染）或显式跳过：渲染交给客户端水合阶段。
-          return;
-        }
-        this.chart = createChart(context, this.props.option);
-        this.chartType = this.props.option.type;
-        this.chart.render();
-      })
-      .catch((error: unknown) => {
-        if (!this.destroyed && version === this.attachVersion) {
-          console.error('[TcChart] attach failed:', error);
-        }
-      });
+      .then(
+        this.guardChartCallback((context) => {
+          if (this.destroyed || !context || version !== this.attachVersion) {
+            // 非浏览器环境（SSR / 构建期静态渲染）或显式跳过：渲染交给客户端水合阶段。
+            return;
+          }
+          this.chart = createChart(context, this.props.option);
+          this.chartType = this.props.option.type;
+          this.chart.render();
+        })
+      )
+      .catch(
+        this.guardChartCallback((error: unknown) => {
+          if (!this.destroyed && version === this.attachVersion) {
+            console.error('[TcChart] attach failed:', error);
+          }
+        })
+      );
   }
 
   /**
@@ -177,7 +213,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       return;
     }
 
-    const onMove = (event: Event): void => {
+    const onMove = this.guardChartCallback((event: Event): void => {
       const chart = this.chart;
       if (!chart) {
         return;
@@ -193,13 +229,14 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
         chart.resize(w, h);
       }
       chart.setHover(relX, relY);
-    };
-    const onLeave = (): void => {
+    });
+    const onLeave = this.guardChartCallback((): void => {
       this.chart?.clearHover();
-    };
+    });
 
     element.addEventListener('mousemove', onMove);
     element.addEventListener('mouseleave', onLeave);
+    this.hoverElement = element;
     this.hoverHandlers = [
       ['mousemove', onMove],
       ['mouseleave', onLeave],
@@ -207,11 +244,14 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
   }
 
   private teardownHoverEvents(): void {
-    const element = this.getElement() as HTMLCanvasElement | null;
+    // Component teardown clears el before onUnmounted, so keep the actual
+    // listener owner until these manually registered listeners are removed.
+    const element = this.hoverElement;
     for (const [type, handler] of this.hoverHandlers) {
       element?.removeEventListener(type, handler);
     }
     this.hoverHandlers = [];
+    this.hoverElement = null;
   }
 
   /* —— 自动重绘：容器 / 窗口尺寸变化时防抖重绘 —— */
@@ -221,7 +261,7 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       return;
     }
     this.resizeDebounced = debounce(
-      () => this.handleResize(),
+      this.guardChartCallback(() => this.handleResize()),
       RESIZE_DEBOUNCE_MS
     );
 
@@ -230,7 +270,9 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       // 小程序：各平台均有窗口尺寸回调（横竖屏切换 / 分屏等场景）
       const mp = getMiniProgramGlobal(platform) as MpWindowResizeApi | null;
       if (mp && typeof mp.onWindowResize === 'function') {
-        this.mpResizeHandler = () => this.resizeDebounced!.run();
+        this.mpResizeHandler = this.guardChartCallback(() =>
+          this.resizeDebounced?.run()
+        );
         mp.onWindowResize(this.mpResizeHandler);
       }
       return;
@@ -244,8 +286,8 @@ export class TcChart extends Component<TcChartProps, TcChartState> {
       typeof element.getContext === 'function' &&
       typeof ResizeObserver === 'function'
     ) {
-      this.resizeObserver = new ResizeObserver(() =>
-        this.resizeDebounced!.run()
+      this.resizeObserver = new ResizeObserver(
+        this.guardChartCallback(() => this.resizeDebounced?.run())
       );
       this.resizeObserver.observe(element);
     }

@@ -26,3 +26,6 @@ export type {
 };
 
 export { BaseComponent } from './base-component';
+
+export { Bind, Delay, Debounce, Emit, WatchProps } from './method-decorators';
+export type { DelayOptions, WatchPropsOptions } from './method-decorators';

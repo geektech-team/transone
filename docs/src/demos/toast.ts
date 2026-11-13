@@ -1,4 +1,4 @@
-import { createComponent, type VNode } from 'transone';
+import { createComponent, Debounce, type VNode } from 'transone';
 import { TuButton, TuToast } from 'transone-ui';
 import { DemoHost } from './DemoHost';
 
@@ -21,11 +21,12 @@ export class DemoToast extends DemoHost<DemoToastState> {
       bottom: '底部提示',
     };
     this.setState({ visible: true, content: labels[position], position });
-    setTimeout(() => {
-      if (this.mounted) {
-        this.setState({ visible: false });
-      }
-    }, 1600);
+    this.hideAfterPause();
+  }
+
+  @Debounce(1600)
+  private hideAfterPause(): void {
+    this.setState({ visible: false });
   }
 
   protected renderDemo(): VNode {
@@ -53,7 +54,11 @@ export class DemoToast extends DemoHost<DemoToastState> {
         }) as unknown as VNode,
         createComponent({
           component: TuToast,
-          props: { visible: s.visible, content: s.content, position: s.position },
+          props: {
+            visible: s.visible,
+            content: s.content,
+            position: s.position,
+          },
         }) as unknown as VNode,
       ],
     };

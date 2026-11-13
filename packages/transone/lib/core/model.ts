@@ -9,9 +9,12 @@ export interface ModelBindingOptions {
 export type ModelBinding = string | ModelBindingOptions;
 
 type ModelState = Record<string, unknown>;
+type ModelCallbackGuard = (callback: () => void) => () => unknown;
 
 interface BindingRecord {
   binding: ModelBinding;
+  state: ModelState;
+  lifetime: { active: boolean };
   path: string;
   parse?: (value: unknown) => unknown;
   format?: (value: unknown) => string;
@@ -194,14 +197,19 @@ export class ModelBindingController {
   public bind(
     element: HTMLElement,
     binding: ModelBinding,
-    state: ModelState
+    state: ModelState,
+    guardCallback?: ModelCallbackGuard
   ): void {
     if (!this.isSupportedControl(element)) {
       return;
     }
 
     const existing = this.bindings.get(element);
-    if (existing && this.sameBinding(existing, binding)) {
+    if (
+      existing &&
+      existing.state === state &&
+      this.sameBinding(existing, binding)
+    ) {
       return;
     }
     this.cleanup(element);
@@ -215,19 +223,24 @@ export class ModelBindingController {
         !['checkbox', 'radio'].includes(element.type))
         ? 'input'
         : 'change';
-    const listener = (): void => {
+    const lifetime = { active: true };
+    const receive = (): void => {
+      if (!lifetime.active) return;
       const currentValue = getModelValue(state, path);
-      setModelValue(
-        state,
-        path,
-        toModelValue(binding, controlValue(element, currentValue))
-      );
+      const value = controlValue(element, currentValue);
+      if (!lifetime.active) return;
+      const parsed = toModelValue(binding, value);
+      if (!lifetime.active) return;
+      setModelValue(state, path, parsed);
     };
+    const listener = guardCallback ? guardCallback(receive) : receive;
 
     element.addEventListener(eventName, listener);
     const effectRef = effect(sync);
     this.bindings.set(element, {
       binding,
+      state,
+      lifetime,
       path,
       parse: typeof binding === 'string' ? undefined : binding.parse,
       format: typeof binding === 'string' ? undefined : binding.format,
@@ -242,6 +255,7 @@ export class ModelBindingController {
     if (!existing) {
       return;
     }
+    existing.lifetime.active = false;
     element.removeEventListener(existing.eventName, existing.listener);
     stop(existing.effect);
     this.bindings.delete(element);

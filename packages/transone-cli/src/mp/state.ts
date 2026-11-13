@@ -7,8 +7,9 @@ import {
   DeferredInitialProps,
   referencesProps,
   type InstanceFieldPlan,
+  type InstanceFieldValue,
 } from '../components/instance-fields';
-import { stateAliases, type FieldStateAlias } from './fields';
+import { instanceFields, stateAliases, type FieldStateAlias } from './fields';
 
 /**
  * 编译 initState() 为小程序 data 初始值（JS 对象字面量源码）。
@@ -20,124 +21,9 @@ export function compileState(
   fields?: InstanceFieldPlan,
   aliases?: FieldStateAlias[]
 ): string {
+  const plan = fields ?? instanceFields(context, classSource);
   try {
-    const { ts } = context;
-    const owned = ownedMethod(context, classSource, 'initState');
-    const method = owned?.declaration;
-    if (owned) classSource = owned.owner;
-    if (!method?.body) {
-      return '{}';
-    }
-
-    const consts = collectModuleConsts(context, classSource);
-    const locals = new Map<string, tsTypes.Expression>();
-    const declarations = new Map<
-      tsTypes.VariableDeclaration,
-      tsTypes.Expression
-    >();
-    let returnStatement: tsTypes.ReturnStatement | undefined;
-    for (const statement of method.body.statements) {
-      if (ts.isVariableStatement(statement)) {
-        const isConst = statement.declarationList.flags & ts.NodeFlags.Const;
-        if (!isConst) {
-          throw mpError(
-            classSource.filePath,
-            'initState() 内只支持 const 声明（data 需静态求值）'
-          );
-        }
-        for (const declaration of statement.declarationList.declarations) {
-          if (ts.isIdentifier(declaration.name) && declaration.initializer) {
-            locals.set(declaration.name.text, declaration.initializer);
-            declarations.set(declaration, declaration.initializer);
-          }
-        }
-        continue;
-      }
-      if (ts.isReturnStatement(statement)) {
-        returnStatement = statement;
-        continue;
-      }
-      throw mpError(
-        classSource.filePath,
-        `initState() 内不支持的语句（只支持 const 声明与 return）: ${statement.getText().slice(0, 60)}`
-      );
-    }
-    if (!returnStatement?.expression) {
-      throw mpError(
-        classSource.filePath,
-        'initState() 必须以 return 表达式结束'
-      );
-    }
-
-    const allConsts = new Map([...consts, ...locals]);
-    const replaceSuper = (
-      expression: tsTypes.Expression
-    ): tsTypes.Expression => {
-      const transformed = ts.transform(expression, [
-        (transformContext) => (node) => {
-          const visit = (current: tsTypes.Node): tsTypes.Node => {
-            if (
-              ts.isCallExpression(current) &&
-              ts.isPropertyAccessExpression(current.expression) &&
-              current.expression.expression.kind ===
-                ts.SyntaxKind.SuperKeyword &&
-              current.expression.name.text === 'initState' &&
-              current.arguments.length === 0
-            ) {
-              const parent = parentSource(context, classSource);
-              const text = parent
-                ? compileState(context, parent, fields)
-                : '{}';
-              return ts
-                .createSourceFile(
-                  'state.ts',
-                  `(${text})`,
-                  ts.ScriptTarget.Latest,
-                  true
-                )
-                .statements.filter(ts.isExpressionStatement)[0].expression;
-            }
-            return ts.visitEachChild(current, visit, transformContext);
-          };
-          return ts.visitNode(node, visit) as tsTypes.Expression;
-        },
-      ]);
-      const result = transformed.transformed[0];
-      transformed.dispose();
-      return result;
-    };
-    for (const [name, value] of allConsts)
-      allConsts.set(name, replaceSuper(value));
-    for (const [declaration, value] of declarations)
-      declarations.set(declaration, replaceSuper(value));
-    const runtimeProps =
-      !!fields && (fields.usesProps || referencesProps(method.body));
-    if (fields && (fields.entries.length || runtimeProps))
-      for (const declaration of declarations.keys())
-        if (context.ts.isIdentifier(declaration.name))
-          try {
-            fields.evaluate(declaration.name, undefined, declarations);
-          } catch (error) {
-            if (!(error instanceof DeferredInitialProps)) throw error;
-          }
-    const value =
-      fields && (fields.entries.length || runtimeProps)
-        ? fields.evaluate(
-            replaceSuper(returnStatement.expression),
-            undefined,
-            declarations
-          )
-        : foldExpression(
-            ts,
-            replaceSuper(returnStatement.expression),
-            allConsts
-          );
-    if (value === undefined) {
-      throw mpError(
-        classSource.filePath,
-        'initState() 的结果必须能静态求值（只支持字面量、模块/局部常量与简单表达式）'
-      );
-    }
+    const value = evaluateState(context, classSource, plan, new Set());
     if (!value || typeof value !== 'object' || Array.isArray(value))
       throw mpError(classSource.filePath, 'initState() 必须返回对象');
     function validateJSON(value: unknown): void {
@@ -153,11 +39,107 @@ export function compileState(
         Object.values(value).forEach(validateJSON);
     }
     validateJSON(value);
-    if (fields && aliases) aliases.push(...stateAliases(fields, value));
+    if (aliases) aliases.push(...stateAliases(plan, value));
     return JSON.stringify(value, null, 2);
   } catch (error) {
     if (error instanceof DeferredInitialProps) return '{}';
     throw error;
+  }
+}
+
+/** Keep parent objects alive until the final result is serialized. Each call
+ * gets a fresh local-constant frame, while fields retain their actual identity. */
+function evaluateState(
+  context: CompileContext,
+  classSource: ClassSource,
+  fields: InstanceFieldPlan,
+  active: Set<tsTypes.MethodDeclaration>
+): InstanceFieldValue {
+  const { ts } = context;
+  const owned = ownedMethod(context, classSource, 'initState');
+  const method = owned?.declaration;
+  if (owned) classSource = owned.owner;
+  if (!method?.body) return {};
+  if (active.has(method))
+    throw mpError(classSource.filePath, 'initState() 继承调用循环');
+  const locals = new Map<tsTypes.VariableDeclaration, tsTypes.Expression>();
+  let returned: tsTypes.Expression | undefined;
+  for (const statement of method.body.statements) {
+    if (returned)
+      throw mpError(
+        classSource.filePath,
+        'initState() 必须以单个 return 表达式结束'
+      );
+    if (ts.isVariableStatement(statement)) {
+      if (!(statement.declarationList.flags & ts.NodeFlags.Const))
+        throw mpError(
+          classSource.filePath,
+          'initState() 内只支持 const 声明（data 需静态求值）'
+        );
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer)
+          throw mpError(
+            classSource.filePath,
+            'initState() 内只支持有初值的 const 标识符'
+          );
+        locals.set(declaration, declaration.initializer);
+      }
+    } else if (ts.isReturnStatement(statement) && statement.expression)
+      returned = statement.expression;
+    else
+      throw mpError(
+        classSource.filePath,
+        'initState() 内只支持 const 声明与 return'
+      );
+  }
+  if (!returned)
+    throw mpError(classSource.filePath, 'initState() 必须以 return 表达式结束');
+  let hasSuper = false;
+  const findSuper = (node: tsTypes.Node): void => {
+    if (node.kind === ts.SyntaxKind.SuperKeyword) hasSuper = true;
+    ts.forEachChild(node, findSuper);
+  };
+  findSuper(method.body);
+  // Preserve the legacy field-free, single-return static constant subset.
+  if (
+    !fields.entries.length &&
+    !fields.usesProps &&
+    !referencesProps(method.body) &&
+    !hasSuper &&
+    !locals.size
+  ) {
+    const value = foldExpression(
+      ts,
+      returned,
+      collectModuleConsts(context, classSource)
+    );
+    if (value === undefined)
+      throw mpError(classSource.filePath, 'initState() 的结果必须能静态求值');
+    return value;
+  }
+  active.add(method);
+  try {
+    const resolveSuper = (): InstanceFieldValue => {
+      const parent = parentSource(context, classSource);
+      return parent ? evaluateState(context, parent, fields, active) : {};
+    };
+    // Validate unused local initializers too, including branches hidden by
+    // deferred props. Their evaluation frames are intentionally discarded.
+    for (const declaration of locals.keys()) {
+      try {
+        fields.evaluate(
+          declaration.name as tsTypes.Identifier,
+          undefined,
+          locals,
+          resolveSuper
+        );
+      } catch (error) {
+        if (!(error instanceof DeferredInitialProps)) throw error;
+      }
+    }
+    return fields.evaluate(returned, undefined, locals, resolveSuper);
+  } finally {
+    active.delete(method);
   }
 }
 

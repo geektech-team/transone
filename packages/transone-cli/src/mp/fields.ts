@@ -11,6 +11,7 @@ import { reference } from './inheritance';
 import { ownedMethod } from './inheritance';
 import { runtimeOwner, sourceSymbolAt } from './source';
 import { mpError } from './errors';
+import { readMethodDecorators } from '../components/method-decorators';
 import type { ClassSource, CompileContext } from './types';
 export interface FieldStateAlias {
   field: string[];
@@ -111,10 +112,46 @@ export function instanceFields(
     },
   });
 }
+export function requiresDynamicProps(
+  context: CompileContext,
+  source: ClassSource
+): boolean {
+  const owners = fieldOwners(context, source);
+  // Watchers need the raw logical props packet even when no initializer reads
+  // props. Manual commits must render this packet on every native dialect.
+  for (const owner of owners) {
+    for (const member of owner.declaration.members) {
+      if (!ts.isMethodDeclaration(member)) continue;
+      if (readMethodDecorators(context.index, owner.source, member)?.watchProps)
+        return true;
+      let commitsProps = false;
+      const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node)) {
+          const expression = outerTransparent(node.expression);
+          if (
+            (ts.isPropertyAccessExpression(expression) &&
+              expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+              expression.name.text === 'setProps') ||
+            (ts.isElementAccessExpression(expression) &&
+              expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+              ts.isStringLiteralLike(expression.argumentExpression) &&
+              expression.argumentExpression.text === 'setProps')
+          )
+            commitsProps = true;
+        }
+        ts.forEachChild(node, visit);
+      };
+      if (member.body) visit(member.body);
+      if (commitsProps) return true;
+    }
+  }
+  return false;
+}
 export function requiresInitialProps(
   context: CompileContext,
   source: ClassSource
 ): boolean {
+  if (requiresDynamicProps(context, source)) return true;
   const owners = fieldOwners(context, source);
   if (
     owners.some((owner) =>

@@ -141,7 +141,10 @@ it.each([
     if (
       a.kind === 'sequence' ||
       b.kind === 'sequence' ||
-      rename.kind === 'sequence'
+      rename.kind === 'sequence' ||
+      a.kind === 'invoke' ||
+      b.kind === 'invoke' ||
+      rename.kind === 'invoke'
     )
       throw new Error('Expected single actions');
     expect(a.key).not.toBe(b.key);

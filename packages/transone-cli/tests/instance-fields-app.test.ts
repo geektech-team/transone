@@ -134,7 +134,8 @@ it.each(['app-ios', 'app-android', 'app-harmony'] as const)(
       if (action.kind === 'sequence') action.actions.forEach(run);
       else if (action.kind === 'increment')
         values[action.key] = Number(values[action.key]) + action.by;
-      else values[action.key] = action.value;
+      else if (action.kind === 'set-literal') values[action.key] = action.value;
+      else throw new Error('This static fixture must not contain runtime actions');
     }
     run(first);
     expect(Object.values(values)).toEqual(['live', 11, 8, 8, 7, 3, 8]);

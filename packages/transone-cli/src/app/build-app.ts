@@ -54,7 +54,7 @@ async function generateNativeApp(
   )) {
     const target = buildOutputPath(outDir, relative);
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, content, 'utf8');
+    await writeFile(target, content);
     assetsBuilt.push(target);
   }
   if (existsSync(app.publicDir))

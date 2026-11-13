@@ -292,6 +292,7 @@ it('folds parent imported constants and local super state spreads with inherited
   )((v: any) => (page = v));
   expect(page.data).toEqual({ count: 4, extra: 10 });
   page.setData = (v: any) => Object.assign(page.data, v);
+  page.onLoad();
   page.onReady();
   expect(page.data.count).toBe(8);
 });

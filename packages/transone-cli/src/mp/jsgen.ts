@@ -1,5 +1,6 @@
 import { CompiledUnit, PropertyTypes } from './types';
 import type { MpDialect } from './dialect';
+import { componentEventProp } from './component-events';
 import {
   runtimePreamble,
   lifecycleEntries,
@@ -45,12 +46,15 @@ export function generateComponentJs(
     : unit.properties;
   if (dialect.id === 'mp-alipay')
     parts.push(
-      `  props: {${Object.entries(properties)
-        .map(
+      `  props: {${[
+        ...Object.entries(properties).map(
           ([key, type]) =>
-            `${JSON.stringify(key)}:${key === '__transone_props' ? 'null' : type === 'Number' ? '0' : type === 'Boolean' ? 'false' : type === 'Array' ? '[]' : type === 'Object' ? 'null' : "''"}`
-        )
-        .join(',')}},`
+            `${key === '__proto__' ? `[${JSON.stringify(key)}]` : JSON.stringify(key)}:${key === '__transone_props' ? 'null' : type === 'Number' ? '0' : type === 'Boolean' ? 'false' : type === 'Array' ? '[]' : type === 'Object' ? 'null' : "''"}`
+        ),
+        ...unit.customEvents.map(
+          (event) => `${JSON.stringify(componentEventProp(event))}:function(){}`
+        ),
+      ].join(',')}},`
     );
   else parts.push(`  properties: ${generatePropertiesSource(properties)},`);
   parts.push(`  data: ${embedData(unit.data)},`);
@@ -67,9 +71,10 @@ export function generateComponentJs(
     }
     if (dialect.id !== 'mp-alipay') parts.push('  },');
   }
-  const hasPropsHook = unit.methods.some(
-    (entry) => entry.key === 'onPropsChange'
-  );
+  const hasPropsHook =
+    unit.methods.some((entry) => entry.key === 'onPropsChange') ||
+    !!unit.decoratedMethods?.some((spec) => spec.watchProps) ||
+    !!unit.propsUpdates;
   if (hasPropsHook) {
     const watched = Object.keys(unit.properties);
     if (unit.propsInitialization) watched.push('__transone_props');
@@ -103,7 +108,7 @@ export function generatePropertiesSource(properties: PropertyTypes): string {
   }
   const lines = entries.map(
     ([name, type]) =>
-      `    ${JSON.stringify(name)}: { type: ${type === 'null' ? 'null' : type}, value: ${name === '__transone_props' ? 'null' : "''"} },`
+      `    ${name === '__proto__' ? `[${JSON.stringify(name)}]` : JSON.stringify(name)}: { type: ${type === 'null' ? 'null' : type}, value: ${name === '__transone_props' ? 'null' : "''"} },`
   );
   return `{\n${lines.join('\n')}\n  }`;
 }

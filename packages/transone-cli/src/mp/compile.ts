@@ -113,14 +113,18 @@ export function compileUnit(
       fields
     );
 
-    // emitters 包装方法：还原 triggerEvent 的 e.detail.args
+    // Alipay callbacks receive arguments directly; other hosts wrap detail.args.
     const methods: FunctionEntry[] = [...compiledMethods.methods];
+    const nativeEmitterMethods: string[] = [];
     for (const emitter of builder.emitters) {
       const key = emitter.key ?? `__transone_emitter_${emitter.event}`;
       const fn = emitter.passArgs
-        ? `function(e) { this.${emitter.method}(...e.detail.args); }`
+        ? context.dialect.id === 'mp-alipay'
+          ? `function(...args) { this.${emitter.method}(...args); }`
+          : `function(e) { this.${emitter.method}(...e.detail.args); }`
         : `function() { this.${emitter.method}(); }`;
       methods.push({ key, fn });
+      nativeEmitterMethods.push(key);
     }
 
     const usingComponents: Record<string, string> = {};
@@ -139,18 +143,28 @@ export function compileUnit(
       properties: {},
       propsReferenced: builder.propsReferenced,
       methods,
+      decoratedMethods: compiledMethods.decoratedMethods,
+      nativeEmitterMethods,
       lifecycle: compiledMethods.lifecycle,
       customEvents: [...customEvents],
       usingComponents,
       inlineModules: compiledMethods.inlineModules ?? legacyModules ?? [],
       initialization: compiledMethods.initialization,
+      initializationKeys: [
+        ...new Set(fields.entries.map((entry) => entry.name)),
+      ],
       initializationFields: [...builder.initializationFields],
       initializationWritesState: compiledMethods.initializationWritesState,
+      guardedCallbacks: compiledMethods.guardedCallbacks,
+      propsUpdates: compiledMethods.propsUpdates,
       propsInitialization:
         fields.usesProps || requiresInitialProps(context, classSource),
       rootProps,
     };
     for (const name of fields.propsReferenced) unit.propsReferenced.add(name);
+    for (const spec of unit.decoratedMethods ?? []) {
+      if (spec.watchProps) unit.propsReferenced.add(spec.watchProps.key);
+    }
 
     if (kind === 'component') {
       context.components.set(name, unit);

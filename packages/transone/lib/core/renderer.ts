@@ -141,13 +141,14 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
       if (context.appContext && instance.setAppContext) {
         instance.setAppContext(context.appContext);
       }
-      this.syncEmitters(instance, vnode.emitters ?? {});
+      this.syncEmitters(instance, vnode.emitters ?? {}, context);
       context.registerChild(instance);
       const node = instance.mountToNode();
       this.trackInstanceNode(instance, node);
       instance.setElementChangeListener?.((previousNode, nextNode) => {
         this.trackInstanceNode(instance, previousNode);
         this.trackInstanceNode(instance, nextNode);
+        context.onElementChange?.(previousNode, nextNode);
       });
       return node;
     } catch (error) {
@@ -185,7 +186,7 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
     const instance = this.instances.get(currentNode);
 
     if (instance && oldVNode.component === newVNode.component) {
-      this.syncEmitters(instance, newVNode.emitters ?? {});
+      this.syncEmitters(instance, newVNode.emitters ?? {}, context);
       instance.setProps(this.createProps(newVNode));
       const nextNode = instance.getElement() ?? currentNode;
       this.trackInstanceNode(instance, nextNode);
@@ -223,7 +224,8 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
 
   private syncEmitters(
     instance: ComponentInstance,
-    emitters: NonNullable<ComponentNode['emitters']>
+    emitters: NonNullable<ComponentNode['emitters']>,
+    context: RenderRuntimeContext
   ): void {
     const current = this.emitterUnsubscribers.get(instance) ?? new Map();
 
@@ -242,7 +244,10 @@ export class ComponentRenderStrategy implements RenderStrategy<ComponentNode> {
 
       current.set(eventName, {
         listener,
-        unsubscribe: instance.on(eventName, listener),
+        unsubscribe: instance.on(
+          eventName,
+          context.guardCallback ? context.guardCallback(listener) : listener
+        ),
       });
     });
 

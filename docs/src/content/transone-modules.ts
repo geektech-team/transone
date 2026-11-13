@@ -84,7 +84,83 @@ export const transoneApplicationPage: DocPage = {
       '若在字段初始化器或父类自定义构造器中提前读取 state，仍不能依赖尚未初始化的后续字段。卸载未使用的实例不会执行初始化；重新挂载保留状态并重建样式。小程序和原生 App 支持纯表达式实例字段：取得初始 props 后，按父到子、声明顺序初始化字段，再执行 initState；declare/static 不参与实例初始化。字段和初始 state 可以读取 props，后续 props 更新不会重新初始化，直接 props 绑定继续更新。',
     ),
     paragraph(
+      'Web 的 initState 失败会缓存原始异常，后续读取不重复执行；显式赋值 state 仍可替换懒初始化入口。initState 中的 setProps 更新在成功或失败后都会保留，并合并到初始化前最新的 props。initStyles、beforeMount 或 render 中重入挂载会报错，已挂载实例仍保持幂等。挂载期间 unmount 会标记取消，在当前同步阶段结束后清理完整子树并经错误边界报告取消；之后重新挂载保留成功初始化的 state。',
+    ),
+    paragraph(
       '小程序在真实 props 就绪后初始化：微信/抖音/小红书组件使用 attached，支付宝组件使用 onInit；页面使用 onLoad 和 rootProps。App 支持静态可分析的 props 与父 state 初始标量快照，原生 state 落点仍限于字符串、布尔值和有限数字。副作用调用、自定义构造器、早期 state 读取及不能表示的动态对象或可变快照会明确报错。',
+    ),
+    paragraph(
+      '小程序同步初始化失败时恢复声明字段描述符、JavaScript 侧 data 对象图、框架内部状态及原 setData；恢复成功后可使用当前 props 重试，不重复包装 setData。业务控制标记和外部副作用不回滚，也不能撤回已发送的异步原生 UI 更新；props getter 会被拒绝且不会执行。共享纯求值器不会把失败校验缓存为成功，连续可选链和括号断链遵循 JavaScript 规则。',
+    ),
+    paragraph(
+      '多层继承的直接 super.initState() 透传保留对象引用，展开返回值创建新根对象，方法局部常量按每次调用独立求值。卸载会取消上一轮尚未执行的更新任务，重新挂载保留 state 并正常接收新更新。小程序无字段组件同样等到 attached/onInit 执行 beforeMount；同轮重入和重复卸载不会重复调用钩子，支付宝 beforeMount 失败后不进入 onMounted。',
+    ),
+    paragraph(
+      'guardCallback 是可选的 protected 入口，用来在方法或钩子中保护异步续体。卸载或初始化失败使对应作用域失效，旧回调不能进入新挂载；this、参数及有效返回值按原调用保留，普通返回值和 Promise 解析值均可能为 undefined。state、setProps、setState 的既有签名不变。',
+    ),
+    codeBlock(
+      'ts',
+      `protected beforeMount() {
+  const commit = this.guardCallback((value: number) => {
+    this.setState({ count: value });
+  });
+  return loadCount().then(commit); // loadCount(): Promise<number>
+}`,
+    ),
+    paragraph(
+      '使用 await 时也在等待前创建 commit，再用它提交结果。guard 只保护回调入口和返回结果，无法打断已经开始的 async 函数；await 后继续直接使用原 this 写 state 仍可能污染新挂载。任意业务 Promise 的状态提交需显式保护续体，并结合 onDispose、AbortSignal 等现有取消机制。',
+    ),
+    paragraph(
+      '定时器以及 then、catch、finally 中的状态提交都要在开始等待前绑定 guard。请求取消不能撤回已完成的适配器结果或中断任意响应拦截器 Promise；Web 清理函数直接取消请求，避免给清理本身套已失效的 guard。嵌套 Promise/thenable 在最终投递时核对原作用域，then getter 只读取一次；thenable 自身的业务执行仍需显式管理取消。',
+    ),
+    paragraph(
+      'Web 自动守护 DOM props/listeners、emitters 和模型输入入口，并观察生命周期返回的 Promise；挂载仍同步完成。活动错误进入保存的祖先边界链，旧作用域的迟到拒绝被消费，不进入新边界；onErrorCaptured 仍同步判断 false/true/undefined。异步清理不阻塞卸载，拒绝记录日志，不转入新挂载的边界。',
+    ),
+    paragraph(
+      '小程序守护 setData completion、observer 和生命周期返回结果并跳过失效入口，方法/钩子中的 guardCallback 由编译器桥接；静态组件和页面同样适用，活动异常保留宿主语义。guardCallback 不属于小程序纯实例字段初始化子集，原生 App 的异步能力也不因此扩展。',
+    ),
+    paragraph(
+      '方法装饰器从 transone 导入：@Bind() 绑定实例并保留返回值，事件可直接传 this.onInput；@Delay(ms) 按次延迟执行，@Delay(ms, {replace: true}) 与 @Debounce(ms) 只保留尚未执行的最后一次调用。调度方法自动绑定实例，卸载取消定时器，旧回调不能进入新挂载。',
+    ),
+    codeBlock(
+      'ts',
+      `@Bind()
+protected onInput(value: unknown): void {
+  this.setState({ text: String(value) });
+}
+
+@Debounce(1600)
+protected hideToast(): void {
+  this.setState({ visible: false });
+}
+// render: emitters: { input: this.onInput }
+// 显示 Toast 后调用 this.hideToast()，连续显示会重新计时。`,
+    ),
+    paragraph(
+      '装饰器沿用标准 decorators，不需要 experimentalDecorators。Delay/Debounce 只用于同步 void 动作，不直接装饰 async 或有返回值的方法；小程序还不支持调度方法重载。不用于字段、访问器、静态、#private 或框架钩子。Web、四方小程序支持这些调度方法；App 支持 Bind，调度装饰器会明确编译报错。异步请求仍需显式保护续体与取消。',
+    ),
+    paragraph(
+      '@Emit(eventName) 在同步方法成功后发送事件：返回值不是 undefined 时作为一个 payload，否则转发原参数；保留方法返回值，抛错不发送。@WatchProps(key, {immediate?: boolean}) 用 Object.is 监听单个顶层 prop，接收新值与旧值，不响应 state 更新或对象内部原地修改。两者都自动绑定实例，可与 Bind 组合，不与调度装饰器或彼此组合。',
+    ),
+    codeBlock(
+      'ts',
+      `@Emit('change')
+public commit(value: number): number {
+  this.setState({ draft: value });
+  return value;
+}
+
+@WatchProps('value', { immediate: true })
+protected receive(value: number, previous: number | undefined): void {
+  if (value === previous) return;
+  this.setState({ draft: value });
+}`,
+    ),
+    paragraph(
+      'WatchProps 默认不立即调用；immediate 在每次挂载的 beforeMount 之后、onMounted 之前调用，旧值为 undefined。挂载后的 setProps 同步通知，重入更新排队；卸载终止旧批次，重新挂载重建基线。监听方法必须同步返回 void，Emit 不接受异步或 thenable 返回值，小程序不支持这两种方法的重载。覆盖方法需要重新添加装饰器，super.method() 只复用父类业务体。原有 onPropsChange 钩子保持原行为。',
+    ),
+    paragraph(
+      'Web、四方小程序和 iOS / Android / 鸿蒙原生 App 支持 props 监听。小程序 Emit 仅用于自定义组件，页面可用 setProps 更新 rootProps。App 生成 Swift / Kotlin / ArkTS 同步运行时，支持标量、普通对象、数组及其嵌套 payload / props，保留引用身份、undefined、稀疏项与浅展开；顶层 WatchProps 仍按 Object.is 比较，内部修改不变成深度监听。初始数据图保持别名并隔离不同 App，动态 render props 按依赖更新。函数、getter、自定义实例和异步方法会明确报错并保留旧输出。监听顺序按父类到子类、每层声明顺序。',
     ),
     apiTable('组件公开 API', [
       { name: 'initState / initStyles / render', type: 'protected 抽象', description: '初始化 state、注册样式、返回 VNode。' },
@@ -96,6 +172,12 @@ export const transoneApplicationPage: DocPage = {
       { name: 'getElement', type: '(): Node | null', description: '当前组件根节点。' },
       { name: 'on / off', type: '(event, listener) => () => void', description: '注册 / 注销自定义事件监听（on 返回注销函数）。' },
       { name: 'emit', type: 'protected (event, ...args)', description: '触发自定义事件（父组件通过 listeners 接收）。' },
+      { name: 'guardCallback', type: 'protected (callback) => guardedCallback', description: '将续体绑定当前资源作用域；保留 this/参数，失效入口和结果返回 undefined。Promise 解析值也可能为 undefined。' },
+      { name: 'Bind', type: '标准方法装饰器工厂 () => decorator', description: '从 transone 导入，绑定实例、保留参数/返回值，可直接传递 this.method。' },
+      { name: 'Delay', type: '(ms, {replace?: boolean}?) => decorator', description: '延迟同步 void 动作；replace 默认 false，卸载取消。Web/小程序支持，App 明确诊断。' },
+      { name: 'Debounce', type: '(ms) => decorator', description: '尾部防抖，保留最后一次参数；按组件资源作用域隔离。Web/小程序支持。' },
+      { name: 'Emit', type: '(eventName: string) => decorator', description: '同步方法成功后发送返回值或原参数，保留返回值；Web/小程序组件/App 支持。' },
+      { name: 'WatchProps', type: '(key, {immediate?: boolean}?) => decorator', description: '监听顶层 prop，Object.is 比较，按挂载隔离通知；Web/小程序/App 支持。' },
       { name: 'provide / inject', type: '(key, value) / (key, fallback?)', description: '跨层级依赖注入（InjectionKey<T>）。' },
       { name: 'getContext', type: 'protected ()', description: '读取应用注入的 AppContext（config 等）。' },
     ]),

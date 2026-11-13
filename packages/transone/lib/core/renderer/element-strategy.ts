@@ -17,7 +17,7 @@ import {
   wrapEventHandler,
 } from './props';
 import type { RenderRuntimeContext, RenderStrategy, Renderable } from './types';
-import { getRouter } from '../../router/instance';
+import { getRouter } from '../../router/instance-state';
 
 export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -86,13 +86,16 @@ export class ElementRenderStrategy<
         const { url: targetUrl, openType: _openType, ...restProps } = props;
         const url = typeof targetUrl === 'string' ? targetUrl : '#';
         element.setAttribute('href', url);
-        const listener: EventListener = (event) => {
+        const navigate = (event: Event): unknown => {
           const router = getRouter();
           if (router) {
             event.preventDefault();
-            void router.push(element.getAttribute('href') ?? '#');
+            return router.push(element.getAttribute('href') ?? '#');
           }
         };
+        const listener: EventListener = context.guardCallback
+          ? context.guardCallback(navigate)
+          : navigate;
         element.addEventListener('click', listener);
         this.listeners.set(
           element,
@@ -102,7 +105,7 @@ export class ElementRenderStrategy<
       } else {
         this.applyProps(element, {}, props, context);
       }
-      this.updateListeners(element, {}, this.collectListeners(vnode));
+      this.updateListeners(element, {}, this.collectListeners(vnode), context);
       this.mountChildren(element, vnode, context);
       this.applyDirections(element, undefined, vnode.directions, context);
 
@@ -169,7 +172,8 @@ export class ElementRenderStrategy<
     this.updateListeners(
       currentNode,
       this.collectListeners(oldVNode),
-      this.collectListeners(newVNode)
+      this.collectListeners(newVNode),
+      context
     );
     this.updateChildren(currentNode, oldVNode, newVNode, context);
     this.applyDirections(
@@ -364,7 +368,8 @@ export class ElementRenderStrategy<
     this.modelBindings.bind(
       element as HTMLElement,
       newDirections.model,
-      context.templateEngine.state as Record<string, unknown>
+      context.templateEngine.state as Record<string, unknown>,
+      context.guardCallback
     );
   }
 
@@ -543,7 +548,8 @@ export class ElementRenderStrategy<
   private updateListeners(
     element: Element,
     oldListeners: EventListeners,
-    newListeners: EventListeners
+    newListeners: EventListeners,
+    context: RenderRuntimeContext
   ): void {
     const store = this.listeners.get(element) ?? new Map();
     const oldKeys = new Set(Object.keys(oldListeners));
@@ -569,15 +575,19 @@ export class ElementRenderStrategy<
           element.tagName.toLowerCase() === 'textarea';
         const domEvent =
           eventName === 'confirm' && !isTextarea ? 'keydown' : eventName;
-        const listener = wrapEventHandler((domEventArg: Event) => {
+        const callback = (domEventArg: Event): unknown => {
           if (domEvent === 'keydown') {
             const key = (domEventArg as KeyboardEvent).key;
             if (key !== 'Enter') {
               return;
             }
           }
-          newListeners[event](domEventArg);
-        }, modifiers);
+          return newListeners[event](domEventArg);
+        };
+        const guarded = context.guardCallback
+          ? context.guardCallback(callback)
+          : callback;
+        const listener = wrapEventHandler(guarded, modifiers);
         element.addEventListener(domEvent, listener);
         store.set(event, { eventName: domEvent, listener });
       }

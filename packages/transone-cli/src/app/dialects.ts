@@ -1,19 +1,45 @@
 import type { NativeAction, NativeDialect, NativeNode, NativeScreen, NativeTextPart } from './types';
+import { nativeExpression, nativeRuntimeSource, nativeString, type NativeLanguage } from './runtime-codegen';
+
+function runtimeText(parts: NativeTextPart[], language: NativeLanguage): string {
+  const values = parts.map(part => nativeExpression(part.kind === 'expression' ? part.value : part.kind === 'state' ? part : {kind:'literal',value:part.value},language,language==='ark'?'this.runtime.':'runtime.'));
+  const array=language==='kotlin'?`listOf(${values.join(', ')})`:`[${values.join(', ')}]`;
+  return language==='swift'?`runtime.present { ${array} }`:language==='kotlin'?`runtime.present({ ${array} }, revision)`:`this.runtime.present(() => ${array}, this.revision)`;
+}
+function runtimeAction(value: NativeAction, language: NativeLanguage): string {
+  const runtime=language==='ark'?'this.runtime.':'runtime.';
+  if(value.kind==='sequence')return value.actions.map(action=>runtimeAction(action,language)).join('; ');
+  if(value.kind==='invoke')return `${language==='swift'?'_ = try ':''}${runtime}invoke(${nativeString(value.instance,language)}, ${nativeString(value.method,language)}, ${language==='kotlin'?'listOf(':'['}${value.args.map(arg=>nativeExpression(arg,language,runtime)).join(', ')}${language==='kotlin'?')':']'})`;
+  const expression=value.kind==='set-literal'?nativeExpression({kind:'literal',value:value.value},language):`${runtime}binary("+", ${runtime}getState(${nativeString(value.key,language)}), ${nativeExpression({kind:'literal',value:value.by},language)})`;
+  return `${runtime}assign(${nativeString(value.key,language)}, ${expression})`;
+}
+function runtimeNode(node: NativeNode, language: NativeLanguage, indent='    '): string {
+  if(node.kind==='container')return `${indent}${language==='swift'?'VStack {':language==='kotlin'?'Column {':'Column() {'}\n${node.children.map(child=>runtimeNode(child,language,indent+'  ')).join('\n')}\n${indent}}`;
+  const label=runtimeText(node.parts,language);
+  if(node.kind==='text')return `${indent}Text(${label})`;
+  const body=runtimeAction(node.action,language);
+  return language==='swift'?`${indent}Button(${label}, action: runtime.action { ${body} })`
+    :language==='kotlin'?`${indent}Button(onClick = runtime.action { ${body} }) { Text(${label}) }`
+    :`${indent}Button(${label}).onClick(this.runtime.action(() => { ${body}; }))`;
+}
 
 function text(parts: NativeTextPart[], language: 'swift' | 'kotlin' | 'ark'): string {
+  if(parts.some(part=>part.kind==='expression'))throw new Error('Native expressions require a component runtime');
+  const simple=parts as Exclude<NativeTextPart,{kind:'expression'}>[];
   if (language === 'swift') {
-    const value = parts.map((part) => part.kind === 'literal' ? part.value : `\\(${part.key})`).join('');
+    const value = simple.map((part) => part.kind === 'literal' ? part.value : `\\(${part.key})`).join('');
     return `"${value.replace(/"/g, '\\"')}"`;
   }
   if (language === 'kotlin') {
-    return JSON.stringify(parts.map((part) => part.kind === 'literal' ? part.value : `$${part.key}`).join(''));
+    return JSON.stringify(simple.map((part) => part.kind === 'literal' ? part.value : `$${part.key}`).join(''));
   }
-  return parts.map((part) => part.kind === 'literal' ? JSON.stringify(part.value) : `this.${part.key}`).join(' + ') || '""';
+  return simple.map((part) => part.kind === 'literal' ? JSON.stringify(part.value) : `this.${part.key}`).join(' + ') || '""';
 }
 function action(node: Extract<NativeNode, { kind: 'button' }>, language: 'swift' | 'kotlin' | 'ark'): string {
   return nativeAction(node.action, language);
 }
 function nativeAction(action: NativeAction, language: 'swift' | 'kotlin' | 'ark'): string {
+  if(action.kind==='invoke')throw new Error('Native method invocation requires a component runtime');
   if (action.kind === 'sequence') return action.actions.map(item => nativeAction(item, language)).join('; ');
   const target = language === 'ark' ? `this.${action.key}` : action.key;
   return action.kind === 'increment' ? `${target} ${action.by >= 0 ? '+=' : '-='} ${Math.abs(action.by)}` : `${target} = ${typeof action.value === 'string' ? JSON.stringify(action.value) : action.value}`;
@@ -42,7 +68,7 @@ export const IOS_DIALECT: NativeDialect = {
   generateProject(screen, config) {
     return {
       'TransOneApp/TransOneApp.swift': `import SwiftUI\n\n@main struct TransOneApp: App { var body: some Scene { WindowGroup { ContentView() } } }\n`,
-      'TransOneApp/ContentView.swift': `import SwiftUI\n\nstruct ContentView: View {\n${swiftState(screen)}\n  var body: some View {\n${swiftNode(screen.root)}\n  }\n}\n`,
+      'TransOneApp/ContentView.swift': screen.program ? `import SwiftUI\nimport Foundation\n\n${nativeRuntimeSource(screen,'swift')}\nfinal class TnModel: ObservableObject {\n  @Published var revision = 0\n  let runtime = TnRuntime()\n  init() { runtime.changed = { [weak self] in self?.revision += 1 } }\n}\nstruct ContentView: View {\n  @StateObject private var model = TnModel()\n  var body: some View {\n    let runtime = model.runtime\n${runtimeNode(screen.root,'swift')}\n      .onAppear { do { try runtime.mount() } catch { print(error) } }\n      .onDisappear { do { try runtime.unmount() } catch { print(error) } }\n  }\n}\n` : `import SwiftUI\n\nstruct ContentView: View {\n${swiftState(screen)}\n  var body: some View {\n${swiftNode(screen.root)}\n  }\n}\n`,
       'TransOneApp.xcodeproj/project.pbxproj': xcodeProject(config),
       'TransOneApp/Assets.xcassets/Contents.json': '{"info":{"author":"xcode","version":1}}\n',
     };
@@ -115,13 +141,114 @@ function xcodeProject(config: { appName: string; bundleId: string; minPlatformVe
 export const ANDROID_DIALECT: NativeDialect = {
   id: 'app-android', label: 'Android 原生 App（Jetpack Compose）', resourceDirectory: 'app/src/main/assets',
   generateProject(screen, config) {
-    const pkg = config.bundleId.replace(/[^A-Za-z0-9_.]/g, '_'); const path = pkg.replace(/\./g, '/');
+    const pkg = config.bundleId.replace(/[^A-Za-z0-9_.]/g, '_');
+    const path = pkg.replace(/\./g, '/');
+    const appName = nativeString(config.appName, 'kotlin');
+    const label = config.appName
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+    const content = screen.program
+      ? `      val runtime = remember { TnRuntime() }
+      var revision by remember { mutableStateOf(0) }
+      DisposableEffect(runtime) {
+        runtime.changed = { revision += 1 }
+        try {
+          runtime.mount()
+        } catch (error: Exception) {
+          android.util.Log.e("TransOne", "Native mount failed", error)
+        }
+        onDispose {
+          try {
+            runtime.unmount()
+          } catch (error: Exception) {
+            android.util.Log.e("TransOne", "Native unmount failed", error)
+          } finally {
+            runtime.changed = {}
+          }
+        }
+      }
+${runtimeNode(screen.root, 'kotlin', '      ')}`
+      : `${kotlinState(screen)}\n${kotlinNode(screen.root, '      ')}`;
     return {
-      'settings.gradle.kts': `rootProject.name = "${config.appName}"\ninclude(":app")\n`,
-      'build.gradle.kts': 'plugins { }\n',
-      'app/build.gradle.kts': `plugins { id("com.android.application") version "8.5.0" apply false }\n`,
-      'app/src/main/AndroidManifest.xml': `<manifest package="${pkg}" xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="${config.appName}"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>\n`,
-      [`app/src/main/java/${path}/MainActivity.kt`]: `package ${pkg}\n\nimport androidx.activity.ComponentActivity\nimport androidx.activity.compose.setContent\nimport androidx.compose.runtime.*\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.material3.*\n\nclass MainActivity : ComponentActivity() { override fun onCreate(savedInstanceState: android.os.Bundle?) { super.onCreate(savedInstanceState); setContent {\n${kotlinState(screen)}\n${kotlinNode(screen.root)}\n} } }\n`,
+      'settings.gradle.kts': `pluginManagement {
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+rootProject.name = ${appName}
+include(":app")
+`,
+      'build.gradle.kts': `plugins {
+  id("com.android.application") version "8.5.2" apply false
+  id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+}
+`,
+      'gradle.properties': 'android.useAndroidX=true\n',
+      'app/build.gradle.kts': `plugins {
+  id("com.android.application")
+  id("org.jetbrains.kotlin.android")
+}
+
+android {
+  namespace = "${pkg}"
+  compileSdk = 34
+  defaultConfig {
+    applicationId = "${pkg}"
+    minSdk = 23
+    targetSdk = 34
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+  kotlinOptions { jvmTarget = "17" }
+  buildFeatures { compose = true }
+  composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+}
+
+dependencies {
+  implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+  implementation("androidx.activity:activity-compose:1.9.0")
+  implementation("androidx.compose.material3:material3")
+}
+`,
+      'app/src/main/AndroidManifest.xml': `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:label="${label}">
+    <activity android:name=".MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+`,
+      [`app/src/main/java/${path}/MainActivity.kt`]: `package ${pkg}
+
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.*
+${screen.program ? nativeRuntimeSource(screen, 'kotlin') : ''}
+class MainActivity : ComponentActivity() {
+  override fun onCreate(savedInstanceState: android.os.Bundle?) {
+    super.onCreate(savedInstanceState)
+    setContent {
+${content}
+    }
+  }
+}
+`,
     };
   },
 };
@@ -129,12 +256,119 @@ export const ANDROID_DIALECT: NativeDialect = {
 export const HARMONY_DIALECT: NativeDialect = {
   id: 'app-harmony', label: 'HarmonyOS 原生 App（ArkUI）', resourceDirectory: 'entry/src/main/resources/rawfile',
   generateProject(screen, config) {
+    const json = (value: object) => JSON.stringify(value, null, 2) + '\n';
+    const page = 'pages/Index';
+    const ability = 'EntryAbility';
+    const abilitySource = `ets/entryability/${ability}.ets`;
+    const sdkProfile = '5.0.0(12)';
+    const modelVersion = '5.0.0';
+    // Embedded 104 × 104 PNG for the default launcher and startup window.
+    const icon = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAGgAAABoCAIAAACSfiL2AAAAtElEQVR42u3Y0QkAIAhFUfdonjZs31ohJALlyF3A8/lizKVEgQAcOHDgBA4cOHDgBA4cOHDgBA4cOHACBw4cOHDX7YIHDhw4cODAgQMHDhw4cOB6w73qz8MN1xFw4MCBAwcOHDhw4MCBAwcOHDhw4MCBAwcOHDhw4MCBAwcOHDhw4MCBAwcOHDhw4MCBAwcOHDhw4MCBAydw4MCBAydw4MCBAydw4MCBEzhw4MCBEzhw4Kp3AAVITDujomsAAAAAAElFTkSuQmCC',
+      'base64'
+    );
     return {
-      'AppScope/app.json5': `{ "app": { "bundleName": "${config.bundleId}", "vendor": "TransOne", "versionCode": 1, "versionName": "1.0.0" } }\n`,
-      'AppScope/resources/base/element/string.json': `{ "string": [{ "name": "app_name", "value": "${config.appName}" }] }\n`,
-      'entry/src/main/module.json5': '{ "module": { "name": "entry", "type": "entry", "mainElement": "EntryAbility" } }\n',
-      'entry/src/main/ets/entryability/EntryAbility.ets': 'import UIAbility from \'@ohos.app.ability.UIAbility\';\nexport default class EntryAbility extends UIAbility {}\n',
-      'entry/src/main/ets/pages/Index.ets': `@Entry\n@Component\nstruct Index {\n${arkState(screen)}\n  build() {\n${arkNode(screen.root)}\n  }\n}\n`,
+      'build-profile.json5': json({
+        app: {
+          signingConfigs: [],
+          products: [{ name: 'default', compatibleSdkVersion: sdkProfile, runtimeOS: 'HarmonyOS' }],
+          buildModeSet: [{ name: 'debug' }, { name: 'release' }],
+        },
+        modules: [{
+          name: 'entry',
+          srcPath: './entry',
+          targets: [{ name: 'default', applyToProducts: ['default'] }],
+        }],
+      }),
+      'hvigorfile.ts': "import { appTasks } from '@ohos/hvigor-ohos-plugin';\nexport default { system: appTasks, plugins: [] };\n",
+      'hvigor/hvigor-config.json5': json({ modelVersion, dependencies: {} }),
+      'oh-package.json5': json({ modelVersion, name: 'transone-app', version: '1.0.0', dependencies: {} }),
+      'AppScope/app.json5': json({
+        app: {
+          bundleName: config.bundleId,
+          vendor: 'TransOne',
+          versionCode: 1,
+          versionName: '1.0.0',
+          icon: '$media:app_icon',
+          label: '$string:app_name',
+        },
+      }),
+      'AppScope/resources/base/element/string.json': json({
+        string: [{ name: 'app_name', value: config.appName }],
+      }),
+      'AppScope/resources/base/media/app_icon.png': icon,
+      'entry/build-profile.json5': json({ apiType: 'stageMode', targets: [{ name: 'default' }] }),
+      'entry/hvigorfile.ts': "import { hapTasks } from '@ohos/hvigor-ohos-plugin';\nexport default { system: hapTasks, plugins: [] };\n",
+      'entry/oh-package.json5': json({ name: 'entry', version: '1.0.0', dependencies: {} }),
+      'entry/src/main/module.json5': json({
+        module: {
+          name: 'entry',
+          type: 'entry',
+          mainElement: ability,
+          deviceTypes: ['phone', 'tablet'],
+          deliveryWithInstall: true,
+          installationFree: false,
+          pages: '$profile:main_pages',
+          abilities: [{
+            name: ability,
+            srcEntry: `./${abilitySource}`,
+            icon: '$media:entry_icon',
+            label: '$string:entry_label',
+            startWindowIcon: '$media:entry_icon',
+            startWindowBackground: '$color:start_window_background',
+            exported: true,
+            skills: [{ entities: ['entity.system.home'], actions: ['ohos.want.action.home'] }],
+          }],
+        },
+      }),
+      'entry/src/main/resources/base/element/color.json': json({
+        color: [{ name: 'start_window_background', value: '#ffffff' }],
+      }),
+      'entry/src/main/resources/base/element/string.json': json({
+        string: [{ name: 'entry_label', value: config.appName }],
+      }),
+      'entry/src/main/resources/base/media/entry_icon.png': icon,
+      'entry/src/main/resources/base/profile/main_pages.json': json({ src: [page] }),
+      [`entry/src/main/${abilitySource}`]: `import { UIAbility } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
+
+export default class EntryAbility extends UIAbility {
+  onWindowStageCreate(windowStage: window.WindowStage): void {
+    try {
+      windowStage.loadContent('${page}', (error) => {
+        if (error.code) console.error('TransOne loadContent failed: ' + error.message);
+      });
+    } catch (error) {
+      console.error('TransOne loadContent failed: ' + String(error));
+    }
+  }
+}
+`,
+      [`entry/src/main/ets/${page}.ets`]: screen.program
+        ? `${nativeRuntimeSource(screen, 'ark')}
+@Entry
+@Component
+struct Index {
+  @State private revision: number = 0;
+  private runtime: TnRuntime = new TnRuntime();
+
+  aboutToAppear(): void {
+    this.runtime.changed = () => { this.revision += 1; };
+    try { this.runtime.mount(); }
+    catch (error) { console.error('TransOne mount failed: ' + String(error)); }
+  }
+
+  aboutToDisappear(): void {
+    try { this.runtime.unmount(); }
+    catch (error) { console.error('TransOne unmount failed: ' + String(error)); }
+  }
+
+  build() {
+${runtimeNode(screen.root, 'ark')}
+  }
+}
+`
+        : `@Entry\n@Component\nstruct Index {\n${arkState(screen)}\n  build() {\n${arkNode(screen.root)}\n  }\n}\n`,
     };
   },
 };

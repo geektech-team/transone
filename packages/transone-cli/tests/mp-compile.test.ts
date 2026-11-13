@@ -210,9 +210,7 @@ describe('mp compile: 页面模板', () => {
     expect(badge.template).toContain('<view text="{{text}}" bindtap="onTap">');
     expect(badge.template).toContain('{{label}}');
     const onTap = badge.methods.find((entry) => entry.key === 'onTap')!;
-    expect(onTap.fn).toContain(
-      "this.triggerEvent('picked', { args: [1, 'two'] })"
-    );
+    expect(onTap.fn).toContain("__transone_emit(this, 'picked', [1, 'two'])");
   });
 
   it('把 this.state 赋值改写为 setData 路径', async () => {
@@ -411,7 +409,9 @@ describe('mp compile: 页面模板', () => {
     const onLoad = unit.lifecycle.find((entry) => entry.key === 'onLoad');
     expect(onLoad).toBeDefined();
     expect(onLoad?.fn).toContain('function (options = {})');
-    expect(onLoad?.fn).toContain("this.setData({ name: options.name ?? '北京' })");
+    expect(onLoad?.fn).toContain(
+      "this.setData({ name: options.name ?? '北京' })"
+    );
   });
 
   it('样式数字值按 px 输出，0 与无单位属性不加单位', async () => {
@@ -580,7 +580,10 @@ describe('mp compile: 相对模块内联', () => {
         'App',
         join(dir, 'page.ts')
       );
-      const unit = compileUnit(context, classSource, { kind: 'page', name: 'index' });
+      const unit = compileUnit(context, classSource, {
+        kind: 'page',
+        name: 'index',
+      });
 
       expect(unit.inlineModules.length).toBeGreaterThan(0);
       const { generatePageJs } = await import('../src/mp/jsgen');

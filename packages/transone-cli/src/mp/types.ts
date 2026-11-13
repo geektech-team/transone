@@ -1,6 +1,7 @@
 import type * as tsTypes from 'typescript';
 import type { ComponentIndex, ClassReference } from '../components/types';
 import type { MpDialect } from './dialect';
+import type { MethodDecoratorSpec } from '../components/method-decorators';
 
 export type UnitKind = 'page' | 'component';
 
@@ -41,6 +42,10 @@ export interface CompiledUnit {
   properties: PropertyTypes;
   /** 页面/组件 methods 条目（不含生命周期钩子）。 */
   methods: FunctionEntry[];
+  /** Per-instance binding and scheduling applied before initialization/hooks. */
+  decoratedMethods?: Array<{ key: string } & MethodDecoratorSpec>;
+  /** Generated native event receivers whose callbacks belong to one mount. */
+  nativeEmitterMethods?: string[];
   /** 页面级生命周期（onLoad/onReady/onUnload）或组件 lifetimes。 */
   lifecycle: FunctionEntry[];
   /** 组件通过 triggerEvent 暴露的自定义事件名。 */
@@ -53,10 +58,16 @@ export interface CompiledUnit {
   inlineModules: string[];
   /** Runs per host instance, before initial state and user lifecycle hooks. */
   initialization?: string;
+  /** All declared instance fields, including fields not read by templates. */
+  initializationKeys?: string[];
   initializationFields?: string[];
   propsInitialization?: boolean;
   rootProps?: string;
   initializationWritesState?: boolean;
+  /** Methods use guarded callbacks or native data completion callbacks. */
+  guardedCallbacks?: boolean;
+  /** Methods commit logical props through the platform bridge. */
+  propsUpdates?: boolean;
 }
 
 /** 编译过程中的上下文：跨模块共享的文件缓存与产物缓存。 */

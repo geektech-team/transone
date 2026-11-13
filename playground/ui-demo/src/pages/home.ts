@@ -1,6 +1,9 @@
 import {
+  Bind,
   Component,
   createComponent,
+  Debounce,
+  Delay,
   each,
   h,
   type VNode,
@@ -236,7 +239,11 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
           }),
           createComponent({
             component: TuButton,
-            props: { type: 'primary', loading: this.state.loading, loadingText: '提交中…' },
+            props: {
+              type: 'primary',
+              loading: this.state.loading,
+              loadingText: '提交中…',
+            },
             children: ['加载按钮'],
             emitters: { click: () => this.handleToggleLoading() },
           }),
@@ -331,7 +338,11 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
         h('div', { className: 'demo-row' }, [
           createComponent({
             component: TuProgress,
-            props: { percent: this.state.progress, textInside: true, strokeWidth: 16 },
+            props: {
+              percent: this.state.progress,
+              textInside: true,
+              strokeWidth: 16,
+            },
           }),
         ]),
         h('div', { className: 'demo-row' }, [
@@ -348,7 +359,9 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
             emitters: { click: () => this.handleIncrease() },
           }),
         ]),
-        h('p', { className: 'demo-note' }, ['宽度变化带 0.3s 过渡，越界自动收敛']),
+        h('p', { className: 'demo-note' }, [
+          '宽度变化带 0.3s 过渡，越界自动收敛',
+        ]),
       ]),
 
       // —— Input ——
@@ -362,7 +375,7 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
               placeholder: '请输入内容',
               clearable: true,
             },
-            emitters: { input: (v) => this.handleInput(v) },
+            emitters: { input: this.handleInput },
           }),
         ]),
         h('div', { className: 'demo-row' }, [
@@ -374,14 +387,16 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
               type: 'password',
               size: 'small',
             },
-            emitters: { input: (v) => this.handleInput(v) },
+            emitters: { input: this.handleInput },
           }),
           createComponent({
             component: TuInput,
             props: { value: '', placeholder: '只读', readonly: true },
           }),
         ]),
-        h('p', { className: 'demo-note' }, [`已输入：${this.state.text || '(空)'}`]),
+        h('p', { className: 'demo-note' }, [
+          `已输入：${this.state.text || '(空)'}`,
+        ]),
       ]),
 
       // —— Popup ——
@@ -528,7 +543,11 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
           }),
           createComponent({
             component: TuCheckbox,
-            props: { checked: this.state.checkboxGroup[1], label: '选项 B（禁用）', disabled: true },
+            props: {
+              checked: this.state.checkboxGroup[1],
+              label: '选项 B（禁用）',
+              disabled: true,
+            },
             emitters: { change: (v) => this.handleCheckboxB(v) },
           }),
         ]),
@@ -576,22 +595,18 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
       h('div', { className: 'demo-section' }, [
         h('h2', { className: 'demo-section-title' }, ['Badge / Cell']),
         h('div', { className: 'demo-row' }, [
-          h(
-            'span',
-            { className: 'demo-badge-host' },
-            [
-              createComponent({
-                component: TuButton,
-                props: { type: 'default', size: 'small' },
-                children: ['消息'],
-                emitters: { click: () => this.handleIncrement() },
-              }),
-              createComponent({
-                component: TuBadge,
-                props: { content: this.state.count, max: 99 },
-              }),
-            ]
-          ),
+          h('span', { className: 'demo-badge-host' }, [
+            createComponent({
+              component: TuButton,
+              props: { type: 'default', size: 'small' },
+              children: ['消息'],
+              emitters: { click: () => this.handleIncrement() },
+            }),
+            createComponent({
+              component: TuBadge,
+              props: { content: this.state.count, max: 99 },
+            }),
+          ]),
           createComponent({
             component: TuBadge,
             props: { content: 'NEW', color: 'var(--tu-primary, #1677ff)' },
@@ -604,12 +619,22 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
         h('div', { className: 'demo-row' }, [
           createComponent({
             component: TuCell,
-            props: { title: '单元格', value: `${this.state.count}`, isLink: true },
+            props: {
+              title: '单元格',
+              value: `${this.state.count}`,
+              isLink: true,
+            },
             emitters: { click: () => this.handleCellClick() },
           }),
           createComponent({
             component: TuCell,
-            props: { title: '必填项', label: '带说明文字', required: true, isLink: true, arrowDirection: 'down' },
+            props: {
+              title: '必填项',
+              label: '带说明文字',
+              required: true,
+              isLink: true,
+              arrowDirection: 'down',
+            },
           }),
           createComponent({
             component: TuCell,
@@ -627,7 +652,9 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
           props: { items: this.state.tabsItems, active: this.state.tabsActive },
           emitters: { change: (index) => this.handleTabsChange(index) },
         }),
-        h('p', { className: 'demo-note' }, [`当前激活：${this.state.tabsActive}（禁用项不可点）`]),
+        h('p', { className: 'demo-note' }, [
+          `当前激活：${this.state.tabsActive}（禁用项不可点）`,
+        ]),
       ]),
       h('div', { className: 'demo-section' }, [
         h('h2', { className: 'demo-section-title' }, ['Carousel']),
@@ -688,7 +715,9 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
           ],
           emitters: { change: (index) => this.handleCarouselChange(index) },
         }),
-        h('p', { className: 'demo-note' }, [`当前页：${this.state.carouselActive + 1}（支持滑动、点击指示点，首尾循环）`]),
+        h('p', { className: 'demo-note' }, [
+          `当前页：${this.state.carouselActive + 1}（支持滑动、点击指示点，首尾循环）`,
+        ]),
       ]),
       h('div', { className: 'demo-section' }, [
         h('h2', { className: 'demo-section-title' }, ['Navbar']),
@@ -779,6 +808,7 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
     this.state.progress -= 10;
   }
 
+  @Bind()
   protected handleInput(value: unknown): void {
     this.state.text = String(value);
   }
@@ -810,25 +840,24 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
   protected handleToastTop(): void {
     this.state.toastPosition = 'top';
     this.state.toastVisible = true;
-    setTimeout(() => {
-      this.state.toastVisible = false;
-    }, 2000);
+    this.hideToastDelayed();
   }
 
   protected handleToastCenter(): void {
     this.state.toastPosition = 'center';
     this.state.toastVisible = true;
-    setTimeout(() => {
-      this.state.toastVisible = false;
-    }, 2000);
+    this.hideToastDelayed();
   }
 
   protected handleToastBottom(): void {
     this.state.toastPosition = 'bottom';
     this.state.toastVisible = true;
-    setTimeout(() => {
-      this.state.toastVisible = false;
-    }, 2000);
+    this.hideToastDelayed();
+  }
+
+  @Debounce(2000)
+  protected hideToastDelayed(): void {
+    this.state.toastVisible = false;
   }
 
   protected handleToastClose(): void {
@@ -841,10 +870,13 @@ export class UiDemoPage extends Component<Record<string, never>, UiDemoState> {
 
   protected handleModalConfirm(): void {
     this.state.modalConfirmLoading = true;
-    setTimeout(() => {
-      this.state.modalConfirmLoading = false;
-      this.state.modalVisible = false;
-    }, 1200);
+    this.finishModalConfirm();
+  }
+
+  @Delay(1200, { replace: true })
+  protected finishModalConfirm(): void {
+    this.state.modalConfirmLoading = false;
+    this.state.modalVisible = false;
   }
 
   protected handleModalClose(): void {

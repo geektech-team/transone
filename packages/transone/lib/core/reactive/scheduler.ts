@@ -12,6 +12,7 @@ import type { ReactiveEffect } from './types';
  */
 export class ReactiveScheduler {
   private readonly pending = new Set<ReactiveEffect>();
+  private currentBatch: Set<ReactiveEffect> | null = null;
   private flushing = false;
   private flushPromise: Promise<void> | null = null;
   private flushResolve: (() => void) | null = null;
@@ -29,6 +30,12 @@ export class ReactiveScheduler {
     }
   }
 
+  /** Cancel work owned by a stopped effect, including an unvisited batch entry. */
+  public cancel(effect: ReactiveEffect): void {
+    this.pending.delete(effect);
+    this.currentBatch?.delete(effect);
+  }
+
   /**
    * 同步冲刷队列：立即执行所有待运行的 effect。
    * 若当前正处于一次冲刷中（例如在 effect 内部调用），则直接返回，
@@ -41,8 +48,9 @@ export class ReactiveScheduler {
     this.flushing = true;
     try {
       while (this.pending.size > 0) {
-        const batch = Array.from(this.pending);
+        const batch = new Set(this.pending);
         this.pending.clear();
+        this.currentBatch = batch;
         for (const effect of batch) {
           if (effect.active) {
             effect();
@@ -50,6 +58,7 @@ export class ReactiveScheduler {
         }
       }
     } finally {
+      this.currentBatch = null;
       this.flushing = false;
       const resolve = this.flushResolve;
       this.flushResolve = null;

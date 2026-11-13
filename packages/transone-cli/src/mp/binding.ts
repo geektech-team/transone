@@ -20,6 +20,7 @@ export interface BindingScope {
   onFieldRead?: (key: string) => void;
   propsInitialization?: boolean;
   propsPacket?: string;
+  propsRenderPacket?: string;
   propsFallback?: string;
 }
 
@@ -105,9 +106,13 @@ export function toBinding(context: BindingContext, node: tsTypes.Node): string {
     if (propsPath) {
       context.onProp?.(propsPath.split('.')[0]);
       const packet = context.scope.propsPacket ?? '__transone_props';
-      return context.scope.propsInitialization
+      const input = context.scope.propsInitialization
         ? `(${packet} ? ${packet}.${propsPath} : ${context.scope.propsFallback ?? ''}${propsPath})`
         : propsPath;
+      const rendered = context.scope.propsRenderPacket;
+      return rendered
+        ? `(${rendered} ? ${rendered}.${propsPath} : ${input})`
+        : input;
     }
 
     const folded = foldExpression(ts, node, context.scope.consts);
